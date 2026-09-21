@@ -877,15 +877,28 @@ function OwnerSettingsForm({
               required
             />
           </div>
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">Nomor WhatsApp Owner</label>
+          <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
+            <label className="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Nomor WhatsApp Pengelola / Admin</span>
+              </span>
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                Tujuan Chat Pelanggan
+              </span>
+            </label>
             <input
               type="text"
+              id="input-owner-whatsapp"
               value={formData.ownerWhatsapp}
               onChange={(e) => setFormData({ ...formData, ownerWhatsapp: e.target.value })}
-              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-900"
+              className="w-full p-2.5 bg-white border border-emerald-300 rounded-lg text-slate-900 font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+              placeholder="Contoh: 081234567890 atau 6281234567890"
               required
             />
+            <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
+              Nomor ini digunakan pelanggan untuk konfirmasi booking otomatis dan chat WhatsApp langsung setelah booking selesai. Gunakan format diawali <strong>08...</strong> atau <strong>62...</strong>
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className="block font-bold text-slate-700 mb-1">Alamat Lengkap</label>

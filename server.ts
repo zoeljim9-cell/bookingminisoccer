@@ -373,6 +373,9 @@ app.use('/api', (err: any, req: Request, res: Response, next: NextFunction) => {
 // VITE MIDDLEWARE & SERVER START
 // -------------------------------------------------------------
 
+// Export express app for serverless deployment (Vercel)
+export default app;
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -388,9 +391,12 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
+  // Only listen directly if not running inside a serverless runtime (e.g. Vercel)
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
 startServer();

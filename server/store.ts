@@ -4,7 +4,8 @@ import crypto from 'crypto';
 import { Booking, FieldClosure, VenueSettings, PriceCalculationResult, CustomerBookingInput, OwnerBookingInput } from '../src/types';
 import { checkCollision, calculatePrice, getJakartaDateString, generatePublicSchedule, timeToMinutes, minutesToTime } from '../src/utils/timeUtils';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+// In Vercel serverless functions, only /tmp is writable; locally process.cwd()/data is used
+const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
 export interface DatabaseSchema {
