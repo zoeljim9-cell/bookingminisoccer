@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import crypto from 'crypto';
-import { createServer as createViteServer } from 'vite';
 import { store } from './server/store';
 import { calculatePrice, getJakartaDateString, timeToMinutes, minutesToTime, checkCollision } from './src/utils/timeUtils';
 
@@ -89,7 +88,8 @@ app.get('/api/schedule', (req, res) => {
     const schedule = store.getPublicSchedule(dateStr);
     res.json(schedule);
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Gagal memuat jadwal.' });
+    console.error('Error in /api/schedule:', err);
+    res.status(500).json({ error: err.message || 'Gagal memuat jadwal.' });
   }
 });
 
@@ -377,7 +377,13 @@ app.use('/api', (err: any, req: Request, res: Response, next: NextFunction) => {
 export default app;
 
 async function startServer() {
+  // If deployed to Vercel, do not initialize Vite server or bind to port
+  if (process.env.VERCEL) {
+    return;
+  }
+
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -391,12 +397,9 @@ async function startServer() {
     });
   }
 
-  // Only listen directly if not running inside a serverless runtime (e.g. Vercel)
-  if (!process.env.VERCEL) {
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on http://0.0.0.0:${PORT}`);
-    });
-  }
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  });
 }
 
 startServer();
