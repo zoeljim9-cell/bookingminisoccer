@@ -65,7 +65,7 @@ export default function App() {
   const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   // Time & Duration Selection
-  const [startTime, setStartTime] = useState<string>('14:45');
+  const [startTime, setStartTime] = useState<string>('16:00');
   const [durationMinutes, setDurationMinutes] = useState<number>(90);
 
   // Customer Contact Draft (persisted during session so not lost if collision occurs)
@@ -178,6 +178,18 @@ export default function App() {
     if (range.durationMinutes < durationMinutes) {
       setDurationMinutes(range.durationMinutes);
     }
+
+    // Otomatis scroll ke section atur durasi dan jam
+    requestAnimationFrame(() => {
+      const pickerEl = document.getElementById('time-duration-picker');
+      if (pickerEl) {
+        pickerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        pickerEl.classList.add('ring-2', 'ring-emerald-500', 'border-emerald-500');
+        setTimeout(() => {
+          pickerEl.classList.remove('ring-2', 'ring-emerald-500', 'border-emerald-500');
+        }, 1200);
+      }
+    });
   };
 
   const handleUpdateContactDraft = (updates: Partial<typeof contactDraft>) => {

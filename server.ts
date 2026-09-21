@@ -7,9 +7,51 @@ import { calculatePrice, getJakartaDateString, timeToMinutes, minutesToTime, che
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+// 1. CORS Headers & Preflight
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Idempotency-Key');
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
 
-// In-memory rate limiter for Cek Booking lookup
+// 2. Body Parsing (JSON + URL-Encoded + Fallback safety)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (typeof req.body === 'string' && req.body.trim().length > 0) {
+    try {
+      req.body = JSON.parse(req.body);
+    } catch {
+      // ignore
+    }
+  }
+  if (!req.body || typeof req.body !== 'object') {
+    req.body = {};
+  }
+  next();
+});
+
+// 3. Normalize Vercel Serverless Function URLs
+// In Vercel, requests to /api/... might arrive with x-matched-path, rewrite capture groups, or stripped prefixes.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const matchedPath = req.headers['x-matched-path'] as string | undefined;
+  if (matchedPath && matchedPath.startsWith('/api/')) {
+    req.url = matchedPath.replace(/^\/api/, '');
+  } else if (req.query && typeof req.query['0'] === 'string') {
+    req.url = '/' + req.query['0'].replace(/^\/+/, '');
+  } else if (req.query && req.query.all) {
+    const segments = Array.isArray(req.query.all) ? req.query.all.join('/') : req.query.all;
+    req.url = '/' + String(segments).replace(/^\/+/, '');
+  }
+  next();
+});
+
+// Rate limiter for Cek Booking lookup
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 function rateLimitLookup(req: Request, res: Response, next: NextFunction) {
   const forwarded = req.headers['x-forwarded-for'];
@@ -34,81 +76,124 @@ function rateLimitLookup(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Owner authentication
+// -------------------------------------------------------------
+// OWNER AUTHENTICATION (Stateless HMAC-SHA256 for Vercel + In-Memory)
+// -------------------------------------------------------------
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'arena2026';
 const ownerSessions = new Set<string>();
+
+function createOwnerToken(): string {
+  const ts = Date.now().toString();
+  const signature = crypto.createHmac('sha256', OWNER_PASSWORD).update(ts).digest('hex');
+  const token = `${ts}.${signature}`;
+  ownerSessions.add(token);
+  return token;
+}
+
+function verifyOwnerToken(token: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  if (ownerSessions.has(token)) return true;
+
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const [tsStr, signature] = parts;
+  const ts = Number(tsStr);
+  if (isNaN(ts)) return false;
+
+  // Sesi berlaku selama 7 hari
+  if (Date.now() - ts > 7 * 24 * 60 * 60 * 1000) return false;
+
+  try {
+    const expectedSig = crypto.createHmac('sha256', OWNER_PASSWORD).update(tsStr).digest('hex');
+    if (signature.length !== expectedSig.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig));
+  } catch {
+    return false;
+  }
+}
 
 function requireOwnerAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Akses ditolak: Silakan login sebagai pengelola/owner terlebih dahulu.' });
   }
-  const token = authHeader.substring(7);
-  if (!ownerSessions.has(token)) {
+  const token = authHeader.substring(7).trim();
+  if (!verifyOwnerToken(token)) {
     return res.status(401).json({ error: 'Sesi login owner sudah kedaluwarsa atau tidak valid.' });
   }
   next();
 }
 
 // -------------------------------------------------------------
-// PUBLIC API ROUTES
+// API ROUTER (Mounted on BOTH /api and / to prevent Vercel route mismatches)
 // -------------------------------------------------------------
+const apiRouter = express.Router();
 
 // Health check
-app.get('/api/health', (req, res) => {
+apiRouter.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
 // Public venue info
-app.get('/api/venue-info', (req, res) => {
-  const settings = store.getSettings();
-  res.json({
-    name: settings.name,
-    address: settings.address,
-    gmapsUrl: settings.gmapsUrl,
-    ownerWhatsapp: settings.ownerWhatsapp,
-    openTime: settings.openTime,
-    closeTime: settings.closeTime,
-    closedDays: settings.closedDays,
-    maxAdvanceDays: settings.maxAdvanceDays,
-    minDurationMinutes: settings.minDurationMinutes,
-    allowedDurations: settings.allowedDurations,
-    bufferMinutes: settings.bufferMinutes,
-    baseHourlyRate: settings.baseHourlyRate,
-    specialRates: settings.specialRates.filter(r => r.isActive),
-    paymentTerms: settings.paymentTerms,
-    cancellationPolicy: settings.cancellationPolicy,
-  });
+apiRouter.get('/venue-info', (req: Request, res: Response) => {
+  try {
+    const settings = store.getSettings();
+    res.json({
+      name: settings.name,
+      address: settings.address,
+      gmapsUrl: settings.gmapsUrl,
+      ownerWhatsapp: settings.ownerWhatsapp,
+      openTime: settings.openTime,
+      closeTime: settings.closeTime,
+      closedDays: settings.closedDays,
+      maxAdvanceDays: settings.maxAdvanceDays,
+      minDurationMinutes: settings.minDurationMinutes,
+      allowedDurations: settings.allowedDurations,
+      bufferMinutes: settings.bufferMinutes,
+      baseHourlyRate: settings.baseHourlyRate,
+      specialRates: settings.specialRates.filter(r => r.isActive),
+      paymentTerms: settings.paymentTerms,
+      cancellationPolicy: settings.cancellationPolicy,
+    });
+  } catch (err: any) {
+    console.error('Error in /venue-info:', err);
+    res.status(500).json({ error: err.message || 'Gagal memuat info lapangan.' });
+  }
 });
 
 // Public schedule for a date (NO customer info leaked!)
-app.get('/api/schedule', (req, res) => {
+apiRouter.get('/schedule', (req: Request, res: Response) => {
   const dateStr = (req.query.date as string) || getJakartaDateString();
   try {
     const schedule = store.getPublicSchedule(dateStr);
     res.json(schedule);
   } catch (err: any) {
-    console.error('Error in /api/schedule:', err);
+    console.error('Error in /schedule:', err);
     res.status(500).json({ error: err.message || 'Gagal memuat jadwal.' });
   }
 });
 
 // Calculate price preview
-app.post('/api/bookings/calculate-price', (req, res) => {
-  const { date, startTime, durationMinutes } = req.body;
-  if (!date || !startTime || !durationMinutes) {
-    return res.status(400).json({ error: 'Parameter tanggal, waktu mulai, dan durasi wajib diisi.' });
+apiRouter.post('/bookings/calculate-price', (req: Request, res: Response) => {
+  try {
+    const { date, startTime, durationMinutes } = req.body || {};
+    if (!date || !startTime || !durationMinutes) {
+      return res.status(400).json({ error: 'Parameter tanggal, waktu mulai, dan durasi wajib diisi.' });
+    }
+    const settings = store.getSettings();
+    const calculation = calculatePrice(date, startTime, Number(durationMinutes), settings);
+    res.json(calculation);
+  } catch (err: any) {
+    console.error('Error in calculate-price:', err);
+    res.status(500).json({ error: err.message || 'Gagal menghitung perkiraan harga.' });
   }
-  const settings = store.getSettings();
-  const calculation = calculatePrice(date, startTime, Number(durationMinutes), settings);
-  res.json(calculation);
 });
 
 // Customer booking creation (atomic + collision check + idempotency)
-app.post('/api/bookings', async (req, res) => {
+apiRouter.post('/bookings', async (req: Request, res: Response) => {
   try {
-    const { date, startTime, durationMinutes, customerName, customerWhatsapp, teamName, notes } = req.body;
-    const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body.idempotencyKey;
+    const { date, startTime, durationMinutes, customerName, customerWhatsapp, teamName, notes } = req.body || {};
+    const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body?.idempotencyKey;
 
     if (!date || !startTime || !durationMinutes || !customerName || !customerWhatsapp) {
       return res.status(400).json({
@@ -116,7 +201,6 @@ app.post('/api/bookings', async (req, res) => {
       });
     }
 
-    // Validate phone number format (Indonesian 10-15 digits)
     const cleanedPhone = customerWhatsapp.replace(/[^0-9]/g, '');
     if (cleanedPhone.length < 9 || cleanedPhone.length > 15) {
       return res.status(400).json({
@@ -151,32 +235,42 @@ app.post('/api/bookings', async (req, res) => {
 });
 
 // Customer Cek Booking (Rate limited, requires code + phone)
-app.post('/api/bookings/lookup', rateLimitLookup, (req, res) => {
-  const { bookingCode, whatsappNumber } = req.body;
-  if (!bookingCode || !whatsappNumber) {
-    return res.status(400).json({
-      error: 'Kode booking dan nomor WhatsApp wajib diisi untuk mencari pesanan Anda.',
-    });
-  }
+apiRouter.post('/bookings/lookup', rateLimitLookup, (req: Request, res: Response) => {
+  try {
+    const { bookingCode, whatsappNumber } = req.body || {};
+    if (!bookingCode || !whatsappNumber) {
+      return res.status(400).json({
+        error: 'Kode booking dan nomor WhatsApp wajib diisi untuk mencari pesanan Anda.',
+      });
+    }
 
-  const booking = store.findBookingByCodeAndPhone(bookingCode, whatsappNumber);
-  if (!booking) {
-    return res.status(404).json({
-      error: 'Booking tidak ditemukan. Pastikan kode booking dan nomor WhatsApp sudah sesuai.',
-    });
-  }
+    const booking = store.findBookingByCodeAndPhone(bookingCode, whatsappNumber);
+    if (!booking) {
+      return res.status(404).json({
+        error: 'Booking tidak ditemukan. Pastikan kode booking dan nomor WhatsApp sudah sesuai.',
+      });
+    }
 
-  res.json({ success: true, booking });
+    res.json({ success: true, booking });
+  } catch (err: any) {
+    console.error('Lookup error:', err);
+    res.status(500).json({ error: err.message || 'Gagal mencari data booking.' });
+  }
 });
 
 // Customer private view by secret token
-app.get('/api/bookings/private/:token', (req, res) => {
-  const { token } = req.params;
-  const booking = store.findBookingBySecretToken(token);
-  if (!booking) {
-    return res.status(404).json({ error: 'Tautan booking tidak ditemukan atau sudah tidak valid.' });
+apiRouter.get('/bookings/private/:token', (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+    const booking = store.findBookingBySecretToken(token);
+    if (!booking) {
+      return res.status(404).json({ error: 'Tautan booking tidak ditemukan atau sudah tidak valid.' });
+    }
+    res.json({ success: true, booking });
+  } catch (err: any) {
+    console.error('Private view error:', err);
+    res.status(500).json({ error: err.message || 'Gagal memuat rincian booking.' });
   }
-  res.json({ success: true, booking });
 });
 
 // -------------------------------------------------------------
@@ -184,60 +278,76 @@ app.get('/api/bookings/private/:token', (req, res) => {
 // -------------------------------------------------------------
 
 // Owner Login
-app.post('/api/owner/login', (req, res) => {
-  const { password } = req.body;
-  if (password === OWNER_PASSWORD) {
-    const sessionToken = crypto.randomUUID();
-    ownerSessions.add(sessionToken);
-    return res.json({ success: true, token: sessionToken });
+apiRouter.post('/owner/login', (req: Request, res: Response) => {
+  try {
+    const { password } = req.body || {};
+    if (!password) {
+      return res.status(400).json({ error: 'Kata sandi tidak boleh kosong.' });
+    }
+    if (password === OWNER_PASSWORD) {
+      const sessionToken = createOwnerToken();
+      return res.json({ success: true, token: sessionToken });
+    }
+    return res.status(401).json({ error: 'Kata sandi owner salah.' });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Gagal memproses login pengelola.' });
   }
-  res.status(401).json({ error: 'Kata sandi owner salah.' });
 });
 
 // Owner Logout
-app.post('/api/owner/logout', requireOwnerAuth, (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    ownerSessions.delete(authHeader.substring(7));
+apiRouter.post('/owner/logout', requireOwnerAuth, (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      ownerSessions.delete(authHeader.substring(7).trim());
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Logout error:', err);
+    res.status(500).json({ error: 'Gagal logout.' });
   }
-  res.json({ success: true });
 });
 
 // Owner Dashboard: Get all bookings, closures, settings, and calculated stats
-app.get('/api/owner/dashboard', requireOwnerAuth, (req, res) => {
-  const todayJakarta = getJakartaDateString();
-  const allBookings = store.getAllBookings();
-  const closures = store.getAllClosures();
-  const settings = store.getSettings();
+apiRouter.get('/owner/dashboard', requireOwnerAuth, (req: Request, res: Response) => {
+  try {
+    const todayJakarta = getJakartaDateString();
+    const allBookings = store.getAllBookings();
+    const closures = store.getAllClosures();
+    const settings = store.getSettings();
 
-  // Calculate quick stats
-  const activeToday = allBookings.filter(b => b.date === todayJakarta && b.bookingStatus !== 'cancelled');
-  const todayBookingsCount = activeToday.length;
-  const todayTotalMinutes = activeToday.reduce((acc, b) => acc + b.durationMinutes, 0);
-  const todayTotalHours = Math.round((todayTotalMinutes / 60) * 10) / 10;
+    const activeToday = allBookings.filter(b => b.date === todayJakarta && b.bookingStatus !== 'cancelled');
+    const todayBookingsCount = activeToday.length;
+    const todayTotalMinutes = activeToday.reduce((acc, b) => acc + b.durationMinutes, 0);
+    const todayTotalHours = Math.round((todayTotalMinutes / 60) * 10) / 10;
 
-  const unpaidActive = allBookings.filter(b => b.bookingStatus !== 'cancelled' && b.paymentStatus === 'unpaid');
-  const unpaidCount = unpaidActive.length;
-  const unpaidTotalAmount = unpaidActive.reduce((acc, b) => acc + b.totalPrice, 0);
+    const unpaidActive = allBookings.filter(b => b.bookingStatus !== 'cancelled' && b.paymentStatus === 'unpaid');
+    const unpaidCount = unpaidActive.length;
+    const unpaidTotalAmount = unpaidActive.reduce((acc, b) => acc + b.totalPrice, 0);
 
-  res.json({
-    todayDate: todayJakarta,
-    stats: {
-      todayBookingsCount,
-      todayTotalHours,
-      unpaidCount,
-      unpaidTotalAmount,
-    },
-    bookings: allBookings,
-    closures,
-    settings,
-  });
+    res.json({
+      todayDate: todayJakarta,
+      stats: {
+        todayBookingsCount,
+        todayTotalHours,
+        unpaidCount,
+        unpaidTotalAmount,
+      },
+      bookings: allBookings,
+      closures,
+      settings,
+    });
+  } catch (err: any) {
+    console.error('Dashboard error:', err);
+    res.status(500).json({ error: err.message || 'Gagal memuat dashboard pengelola.' });
+  }
 });
 
 // Owner Manual Booking
-app.post('/api/owner/bookings', requireOwnerAuth, async (req, res) => {
+apiRouter.post('/owner/bookings', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
-    const { date, startTime, durationMinutes, customerName, customerWhatsapp, teamName, notes, bookingSource, paymentStatus } = req.body;
+    const { date, startTime, durationMinutes, customerName, customerWhatsapp, teamName, notes, bookingSource, paymentStatus } = req.body || {};
     if (!date || !startTime || !durationMinutes || !customerName || !customerWhatsapp) {
       return res.status(400).json({ error: 'Mohon lengkapi informasi booking.' });
     }
@@ -256,15 +366,16 @@ app.post('/api/owner/bookings', requireOwnerAuth, async (req, res) => {
 
     res.status(201).json({ success: true, booking });
   } catch (err: any) {
+    console.error('Manual booking error:', err);
     res.status(409).json({ error: err.message || 'Gagal menambahkan booking manual.' });
   }
 });
 
-// Owner Reschedule Booking (with atomic lock and price recalculation)
-app.put('/api/owner/bookings/:id/schedule', requireOwnerAuth, async (req, res) => {
+// Owner Reschedule Booking
+apiRouter.put('/owner/bookings/:id/schedule', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { date, startTime, durationMinutes } = req.body;
+    const { date, startTime, durationMinutes } = req.body || {};
     if (!date || !startTime || !durationMinutes) {
       return res.status(400).json({ error: 'Tanggal, waktu mulai, dan durasi wajib diisi.' });
     }
@@ -272,112 +383,133 @@ app.put('/api/owner/bookings/:id/schedule', requireOwnerAuth, async (req, res) =
     const updated = await store.updateBookingScheduleAtomic(id, date, startTime, Number(durationMinutes));
     res.json({ success: true, booking: updated });
   } catch (err: any) {
+    console.error('Reschedule error:', err);
     res.status(409).json({ error: err.message || 'Gagal mengubah jadwal booking.' });
   }
 });
 
 // Owner Update Contact / Notes
-app.put('/api/owner/bookings/:id/contact', requireOwnerAuth, (req, res) => {
+apiRouter.put('/owner/bookings/:id/contact', requireOwnerAuth, (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { customerName, customerWhatsapp, teamName, notes } = req.body;
+    const { customerName, customerWhatsapp, teamName, notes } = req.body || {};
     const updated = store.updateBookingDetails(id, { customerName, customerWhatsapp, teamName, notes });
     res.json({ success: true, booking: updated });
   } catch (err: any) {
+    console.error('Update contact error:', err);
     res.status(400).json({ error: err.message });
   }
 });
 
 // Owner Update Payment Status
-app.put('/api/owner/bookings/:id/payment', requireOwnerAuth, (req, res) => {
+apiRouter.put('/owner/bookings/:id/payment', requireOwnerAuth, (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { paymentStatus } = req.body;
+    const { paymentStatus } = req.body || {};
     if (!['paid', 'unpaid'].includes(paymentStatus)) {
       return res.status(400).json({ error: 'Status pembayaran harus paid atau unpaid.' });
     }
     const updated = store.updatePaymentStatus(id, paymentStatus);
     res.json({ success: true, booking: updated });
   } catch (err: any) {
+    console.error('Update payment error:', err);
     res.status(400).json({ error: err.message });
   }
 });
 
 // Owner Cancel Booking
-app.post('/api/owner/bookings/:id/cancel', requireOwnerAuth, (req, res) => {
+apiRouter.post('/owner/bookings/:id/cancel', requireOwnerAuth, (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason } = req.body || {};
     const updated = store.cancelBooking(id, reason);
     res.json({ success: true, booking: updated });
   } catch (err: any) {
+    console.error('Cancel booking error:', err);
     res.status(400).json({ error: err.message });
   }
 });
 
 // Owner Add Field Closure
-app.post('/api/owner/closures', requireOwnerAuth, (req, res) => {
+apiRouter.post('/owner/closures', requireOwnerAuth, (req: Request, res: Response) => {
   try {
-    const { date, startTime, endTime, reason } = req.body;
+    const { date, startTime, endTime, reason } = req.body || {};
     if (!date || !startTime || !endTime || !reason) {
       return res.status(400).json({ error: 'Semua kolom penutupan wajib diisi.' });
     }
     const closure = store.addClosure(date, startTime, endTime, reason);
     res.status(201).json({ success: true, closure });
   } catch (err: any) {
+    console.error('Closure error:', err);
     res.status(409).json({ error: err.message });
   }
 });
 
 // Owner Delete Field Closure
-app.delete('/api/owner/closures/:id', requireOwnerAuth, (req, res) => {
+apiRouter.delete('/owner/closures/:id', requireOwnerAuth, (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     store.removeClosure(id);
     res.json({ success: true });
   } catch (err: any) {
+    console.error('Delete closure error:', err);
     res.status(400).json({ error: err.message });
   }
 });
 
 // Owner Update Settings
-app.put('/api/owner/settings', requireOwnerAuth, (req, res) => {
+apiRouter.put('/owner/settings', requireOwnerAuth, (req: Request, res: Response) => {
   try {
-    const updatedSettings = store.updateSettings(req.body);
+    const updatedSettings = store.updateSettings(req.body || {});
     res.json({ success: true, settings: updatedSettings });
   } catch (err: any) {
+    console.error('Update settings error:', err);
     res.status(400).json({ error: err.message });
   }
 });
 
 // Owner Reset Demo Data
-app.post('/api/owner/reset-demo', requireOwnerAuth, (req, res) => {
+apiRouter.post('/owner/reset-demo', requireOwnerAuth, (req: Request, res: Response) => {
   try {
     store.resetDemoData();
     res.json({ success: true, message: 'Data demo berhasil direset ke kondisi awal.' });
   } catch (err: any) {
+    console.error('Reset demo error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Global JSON error handler for API routes
-app.use('/api', (err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('API Error:', err);
-  const status = err.status || err.statusCode || 500;
+// -------------------------------------------------------------
+// MOUNT API ROUTER AT BOTH /api AND / (Fail-Safe Routing)
+// -------------------------------------------------------------
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
+
+// 4. Fallback 404 Handler for API endpoints
+app.use((req: Request, res: Response, next: NextFunction) => {
+  // If in Vercel serverless environment, always respond with JSON instead of hanging
+  if (process.env.VERCEL || req.path.startsWith('/api')) {
+    return res.status(404).json({ error: `Rute API '${req.method} ${req.originalUrl || req.url}' tidak ditemukan.` });
+  }
+  next();
+});
+
+// 5. Global Error Handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Global Server Error:', err);
+  const status = typeof err.status === 'number' ? err.status : (typeof err.statusCode === 'number' ? err.statusCode : 500);
   res.status(status).json({
     error: err.message || 'Terjadi kesalahan pada server internal.',
   });
 });
 
 // -------------------------------------------------------------
-// VITE MIDDLEWARE & SERVER START
+// VITE MIDDLEWARE & SERVER START (Local / Cloud Run Only)
 // -------------------------------------------------------------
-
-// Export express app for serverless deployment (Vercel)
 export default app;
 
 async function startServer() {
-  // If deployed to Vercel, do not initialize Vite server or bind to port
+  // In Vercel serverless environment, do not start local listening loop or Vite
   if (process.env.VERCEL) {
     return;
   }
