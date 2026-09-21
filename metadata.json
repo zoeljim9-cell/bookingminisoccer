@@ -1,0 +1,6 @@
+{
+  "name": "MiniSoccer Arena",
+  "description": "Aplikasi booking mini soccer satu lapangan yang modern, fleksibel per menit, dan mudah dikelola owner.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
