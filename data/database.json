@@ -1,0 +1,171 @@
+{
+  "settings": {
+    "name": "MiniSoccer Arena",
+    "address": "Jl. Lapangan Hijau No. 18, Jakarta Selatan",
+    "gmapsUrl": "https://maps.google.com/?q=Jakarta",
+    "ownerWhatsapp": "6281234567890",
+    "openTime": "07:00",
+    "closeTime": "23:00",
+    "closedDays": [],
+    "maxAdvanceDays": 30,
+    "minDurationMinutes": 60,
+    "allowedDurations": [
+      60,
+      90,
+      120,
+      180
+    ],
+    "bufferMinutes": 0,
+    "baseHourlyRate": 300000,
+    "specialRates": [
+      {
+        "id": "rule-peak-night",
+        "name": "Tarif Malam (Peak Hour)",
+        "hourlyRate": 350000,
+        "days": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "startTime": "18:00",
+        "endTime": "23:00",
+        "isActive": true
+      }
+    ],
+    "paymentTerms": "Pembayaran dilakukan di lokasi sebelum kick-off via Cash atau QRIS.",
+    "cancellationPolicy": "Pembatalan bebas biaya dapat dilakukan maksimal 6 jam sebelum waktu main."
+  },
+  "bookings": [
+    {
+      "id": "demo-b1",
+      "bookingCode": "MS-2609-A101",
+      "secretToken": "demo-token-1111-aaaa-bbbb",
+      "date": "2026-09-22",
+      "startTime": "14:45",
+      "endTime": "16:15",
+      "durationMinutes": 90,
+      "customerName": "Budi Santoso",
+      "customerWhatsapp": "081234567891",
+      "teamName": "Garuda FC",
+      "notes": "Rompi disediakan pihak lapangan ya min",
+      "bookingSource": "online",
+      "bookingStatus": "confirmed",
+      "paymentStatus": "unpaid",
+      "priceBreakdown": [
+        {
+          "fromTime": "14:45",
+          "toTime": "16:15",
+          "durationMinutes": 90,
+          "hourlyRate": 300000,
+          "amount": 450000,
+          "rateName": "Tarif Dasar"
+        }
+      ],
+      "totalPrice": 450000,
+      "createdAt": "2026-09-22T01:28:47.941Z",
+      "updatedAt": "2026-09-22T01:28:47.941Z",
+      "isDemo": true
+    },
+    {
+      "id": "demo-b2",
+      "bookingCode": "MS-2609-A102",
+      "secretToken": "demo-token-2222-cccc-dddd",
+      "date": "2026-09-22",
+      "startTime": "19:00",
+      "endTime": "21:00",
+      "durationMinutes": 120,
+      "customerName": "Reza Pratama",
+      "customerWhatsapp": "081987654321",
+      "teamName": "Senayan Ballers",
+      "bookingSource": "whatsapp",
+      "bookingStatus": "confirmed",
+      "paymentStatus": "paid",
+      "priceBreakdown": [
+        {
+          "fromTime": "19:00",
+          "toTime": "21:00",
+          "durationMinutes": 120,
+          "hourlyRate": 350000,
+          "amount": 700000,
+          "rateName": "Tarif Malam (Peak Hour)"
+        }
+      ],
+      "totalPrice": 700000,
+      "createdAt": "2026-09-22T01:28:47.941Z",
+      "updatedAt": "2026-09-22T01:28:47.941Z",
+      "isDemo": true
+    },
+    {
+      "id": "demo-b3",
+      "bookingCode": "MS-2609-A103",
+      "secretToken": "demo-token-3333-eeee-ffff",
+      "date": "2026-09-23",
+      "startTime": "16:00",
+      "endTime": "18:00",
+      "durationMinutes": 120,
+      "customerName": "Dimas Setiawan",
+      "customerWhatsapp": "085712345678",
+      "teamName": "Kelapa Gading United",
+      "bookingSource": "phone",
+      "bookingStatus": "confirmed",
+      "paymentStatus": "unpaid",
+      "priceBreakdown": [
+        {
+          "fromTime": "16:00",
+          "toTime": "18:00",
+          "durationMinutes": 120,
+          "hourlyRate": 300000,
+          "amount": 600000,
+          "rateName": "Tarif Dasar"
+        }
+      ],
+      "totalPrice": 600000,
+      "createdAt": "2026-09-22T01:28:47.941Z",
+      "updatedAt": "2026-09-22T01:28:47.941Z",
+      "isDemo": true
+    },
+    {
+      "id": "9ba3c986-9fae-470d-a033-82d5e90bcd25",
+      "bookingCode": "MS-260922-3335",
+      "secretToken": "ff2c1835-db17-41cd-a889-ac728eac5329",
+      "date": "2026-09-22",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "durationMinutes": 60,
+      "customerName": "Test Vercel User",
+      "customerWhatsapp": "081234567890",
+      "teamName": "Vercel FC",
+      "bookingSource": "online",
+      "bookingStatus": "confirmed",
+      "paymentStatus": "unpaid",
+      "priceBreakdown": [
+        {
+          "fromTime": "10:00",
+          "toTime": "11:00",
+          "durationMinutes": 60,
+          "hourlyRate": 300000,
+          "amount": 300000,
+          "rateName": "Tarif Dasar"
+        }
+      ],
+      "totalPrice": 300000,
+      "createdAt": "2026-09-22T01:34:09.480Z",
+      "updatedAt": "2026-09-22T01:34:09.480Z"
+    }
+  ],
+  "closures": [
+    {
+      "id": "demo-c1",
+      "date": "2026-09-22",
+      "startTime": "11:45",
+      "endTime": "13:00",
+      "reason": "Perawatan Rumput & Penyiraman",
+      "createdAt": "2026-09-22T01:28:47.941Z",
+      "isDemo": true
+    }
+  ]
+}

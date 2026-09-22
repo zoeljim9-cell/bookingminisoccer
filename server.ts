@@ -37,22 +37,18 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // 3. Normalize Vercel Serverless Function URLs
-// In Vercel, requests to /api/... might arrive with x-matched-path, rewrite capture groups, or stripped prefixes.
+// In Vercel, requests to /api/index.js or rewrites might include the function name in the URL
 app.use((req: Request, res: Response, next: NextFunction) => {
-  const matchedPath = req.headers['x-matched-path'] as string | undefined;
-  if (matchedPath && matchedPath.startsWith('/api/')) {
-    const stripped = matchedPath.replace(/^\/api/, '');
-    req.url = stripped.startsWith('/') ? stripped : '/' + stripped;
-  } else if (req.query && typeof req.query['0'] === 'string') {
-    req.url = '/' + req.query['0'].replace(/^\/+/, '');
-  } else if (req.query && req.query.all) {
-    const segments = Array.isArray(req.query.all) ? req.query.all.join('/') : req.query.all;
-    req.url = '/' + String(segments).replace(/^\/+/, '');
+  // Strip /api/index.js or /index.js prefix if present in req.url
+  if (req.url.startsWith('/api/index.js')) {
+    req.url = req.url.slice('/api/index.js'.length) || '/';
+  } else if (req.url.startsWith('/index.js')) {
+    req.url = req.url.slice('/index.js'.length) || '/';
   }
 
   // Ensure req.url always begins with /
-  if (!req.url || !req.url.startsWith('/')) {
-    req.url = '/' + (req.url || '');
+  if (!req.url.startsWith('/')) {
+    req.url = '/' + req.url;
   }
 
   next();
@@ -515,9 +511,15 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // -------------------------------------------------------------
 export default app;
 
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NOW_REGION ||
+  process.env.LAMBDA_TASK_ROOT
+);
+
 async function startServer() {
-  // In Vercel serverless environment, do not start local listening loop or Vite
-  if (process.env.VERCEL) {
+  if (isServerless) {
     return;
   }
 
@@ -541,4 +543,7 @@ async function startServer() {
   });
 }
 
-startServer();
+// In Vercel or AWS Lambda serverless functions, do NOT start the standalone HTTP server
+if (!isServerless) {
+  startServer();
+}

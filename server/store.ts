@@ -4,8 +4,14 @@ import crypto from 'crypto';
 import { Booking, FieldClosure, VenueSettings, PriceCalculationResult, CustomerBookingInput, OwnerBookingInput } from '../src/types';
 import { checkCollision, calculatePrice, getJakartaDateString, generatePublicSchedule, timeToMinutes, minutesToTime } from '../src/utils/timeUtils';
 
-// In Vercel serverless functions, only /tmp is writable; locally process.cwd()/data is used
-const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
+// In Vercel / AWS Lambda serverless functions, only /tmp is writable; locally process.cwd()/data is used
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.NOW_REGION ||
+  process.env.LAMBDA_TASK_ROOT
+);
+const DATA_DIR = isServerless ? path.join('/tmp', 'data') : path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
 export interface DatabaseSchema {

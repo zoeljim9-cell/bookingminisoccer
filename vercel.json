@@ -3,10 +3,14 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api"
+      "destination": "/api/index.js"
     },
     {
-      "source": "/((?!api).*)",
+      "source": "/api",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/((?!api|api/).*)",
       "destination": "/index.html"
     }
   ]
