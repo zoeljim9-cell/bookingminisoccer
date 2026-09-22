@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { store } from './server/store';
+import { testMySqlConnection } from './server/prisma';
 import { calculatePrice, getJakartaDateString, timeToMinutes, minutesToTime, checkCollision } from './src/utils/timeUtils';
 
 const app = express();
@@ -479,6 +480,44 @@ apiRouter.post('/owner/reset-demo', requireOwnerAuth, (req: Request, res: Respon
   } catch (err: any) {
     console.error('Reset demo error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Owner Clear Demo Data
+apiRouter.post('/owner/clear-demo', requireOwnerAuth, (req: Request, res: Response) => {
+  try {
+    const clearAll = req.body?.clearAll === true;
+    const result = store.clearDemoData(clearAll);
+    res.json({
+      success: true,
+      message: `Data demo berhasil dibersihkan (${result.removedBookings} booking demo & ${result.removedClosures} penutupan demo dihapus).`,
+      result,
+    });
+  } catch (err: any) {
+    console.error('Clear demo error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Owner Check Database Connection Status (MySQL / Prisma)
+apiRouter.get('/owner/db-status', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const status = await testMySqlConnection();
+    res.json({
+      success: true,
+      connected: status.connected,
+      provider: 'mysql',
+      hasDbUrl: Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== ''),
+      message: status.message,
+    });
+  } catch (err: any) {
+    res.json({
+      success: true,
+      connected: false,
+      provider: 'local-file',
+      hasDbUrl: false,
+      message: err.message || 'Koneksi database tidak aktif',
+    });
   }
 });
 

@@ -2,7 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { Booking, FieldClosure, VenueSettings, PriceCalculationResult, CustomerBookingInput, OwnerBookingInput } from '../src/types';
-import { checkCollision, calculatePrice, getJakartaDateString, generatePublicSchedule, timeToMinutes, minutesToTime } from '../src/utils/timeUtils';
+import { checkCollision, calculatePrice, getJakartaDateString, generatePublicSchedule, timeToMinutes, minutesToTime, normalizeWhatsappNumber } from '../src/utils/timeUtils';
+import {
+  getPrismaClient,
+  mapDbToSettings,
+  mapSettingsToDb,
+  mapDbToBooking,
+  mapBookingToDb,
+  mapDbToClosure,
+} from './prisma';
 
 // In Vercel / AWS Lambda serverless functions, only /tmp is writable; locally process.cwd()/data is used
 const isServerless = Boolean(
@@ -172,6 +180,62 @@ class Store {
 
   constructor() {
     this.data = this.loadFromDisk();
+    // Initialize MySQL Prisma sync if DATABASE_URL is provided
+    this.initPrismaSync().catch((err) => {
+      console.warn('[Prisma] Inisialisasi awal database dilewati:', err.message);
+    });
+  }
+
+  private async initPrismaSync() {
+    const prisma = getPrismaClient();
+    if (!prisma) return;
+    try {
+      // 1. Sync settings
+      const dbSetting = await prisma.venueSetting.findUnique({ where: { id: 'default' } });
+      if (dbSetting) {
+        this.data.settings = mapDbToSettings(dbSetting, this.data.settings);
+      } else {
+        await prisma.venueSetting.create({
+          data: { id: 'default', ...mapSettingsToDb(this.data.settings) },
+        });
+      }
+
+      // 2. Sync bookings
+      const count = await prisma.booking.count();
+      if (count > 0) {
+        const dbBookings = await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } });
+        this.data.bookings = dbBookings.map(mapDbToBooking);
+      } else if (this.data.bookings.length > 0) {
+        for (const b of this.data.bookings) {
+          await prisma.booking.create({ data: mapBookingToDb(b) }).catch(() => {});
+        }
+      }
+
+      // 3. Sync closures
+      const closureCount = await prisma.fieldClosure.count();
+      if (closureCount > 0) {
+        const dbClosures = await prisma.fieldClosure.findMany();
+        this.data.closures = dbClosures.map(mapDbToClosure);
+      } else if (this.data.closures.length > 0) {
+        for (const c of this.data.closures) {
+          await prisma.fieldClosure.create({
+            data: {
+              id: c.id,
+              date: c.date,
+              startTime: c.startTime,
+              endTime: c.endTime,
+              reason: c.reason,
+              isDemo: Boolean(c.isDemo),
+            },
+          }).catch(() => {});
+        }
+      }
+
+      this.saveToDisk(this.data);
+      console.log('[Store] Berhasil sinkronisasi dengan database MySQL via Prisma.');
+    } catch (err: any) {
+      console.warn('[Store] MySQL Prisma sync skipped (tabel belum siap atau db:push diperlukan):', err.message);
+    }
   }
 
   private loadFromDisk(): DatabaseSchema {
@@ -229,8 +293,23 @@ class Store {
   }
 
   public updateSettings(newSettings: Partial<VenueSettings>): VenueSettings {
-    this.data.settings = { ...this.data.settings, ...newSettings };
+    const sanitized = { ...newSettings };
+    if (sanitized.ownerWhatsapp) {
+      sanitized.ownerWhatsapp = normalizeWhatsappNumber(sanitized.ownerWhatsapp) || sanitized.ownerWhatsapp.trim();
+    }
+    this.data.settings = { ...this.data.settings, ...sanitized };
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      prisma.venueSetting
+        .upsert({
+          where: { id: 'default' },
+          create: { id: 'default', ...mapSettingsToDb(this.data.settings) },
+          update: mapSettingsToDb(this.data.settings),
+        })
+        .catch((e) => console.warn('[Prisma] Gagal update VenueSetting di MySQL:', e.message));
+    }
     return this.getSettings();
   }
 
@@ -367,6 +446,13 @@ class Store {
       this.data.bookings.push(newBooking);
       this.saveToDisk(this.data);
 
+      const prisma = getPrismaClient();
+      if (prisma) {
+        prisma.booking.create({ data: mapBookingToDb(newBooking) }).catch((e) => {
+          console.warn('[Prisma] Gagal menyimpan booking ke MySQL:', e.message);
+        });
+      }
+
       if (input.idempotencyKey) {
         this.idempotencyCache.set(input.idempotencyKey, {
           booking: newBooking,
@@ -450,6 +536,17 @@ class Store {
     booking.paymentStatus = status;
     booking.updatedAt = new Date().toISOString();
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      prisma.booking
+        .updateMany({
+          where: { id },
+          data: { paymentStatus: status },
+        })
+        .catch((e) => console.warn('[Prisma] Gagal update payment status di MySQL:', e.message));
+    }
+
     return booking;
   }
 
@@ -460,6 +557,20 @@ class Store {
     booking.cancellationReason = reason || 'Dibatalkan oleh pengelola.';
     booking.updatedAt = new Date().toISOString();
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      prisma.booking
+        .updateMany({
+          where: { id },
+          data: {
+            bookingStatus: 'cancelled',
+            cancellationReason: booking.cancellationReason,
+          },
+        })
+        .catch((e) => console.warn('[Prisma] Gagal update cancel booking di MySQL:', e.message));
+    }
+
     return booking;
   }
 
@@ -491,18 +602,100 @@ class Store {
 
     this.data.closures.push(closure);
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      prisma.fieldClosure
+        .create({
+          data: {
+            id: closure.id,
+            date: closure.date,
+            startTime: closure.startTime,
+            endTime: closure.endTime,
+            reason: closure.reason,
+            isDemo: false,
+          },
+        })
+        .catch((e) => console.warn('[Prisma] Gagal menyimpan closure di MySQL:', e.message));
+    }
+
     return closure;
   }
 
   public removeClosure(id: string) {
     this.data.closures = this.data.closures.filter(c => c.id !== id);
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      prisma.fieldClosure.deleteMany({ where: { id } }).catch((e) => console.warn('[Prisma] Gagal hapus closure di MySQL:', e.message));
+    }
   }
 
   public resetDemoData() {
     this.data = getInitialDemoData();
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      (async () => {
+        try {
+          await prisma.booking.deleteMany();
+          await prisma.fieldClosure.deleteMany();
+          for (const b of this.data.bookings) {
+            await prisma.booking.create({ data: mapBookingToDb(b) }).catch(() => {});
+          }
+          for (const c of this.data.closures) {
+            await prisma.fieldClosure.create({
+              data: {
+                id: c.id,
+                date: c.date,
+                startTime: c.startTime,
+                endTime: c.endTime,
+                reason: c.reason,
+                isDemo: Boolean(c.isDemo),
+              },
+            }).catch(() => {});
+          }
+        } catch (e: any) {
+          console.warn('[Prisma] Reset demo di MySQL dilewati:', e.message);
+        }
+      })();
+    }
+
     return this.data;
+  }
+
+  public clearDemoData(clearAllBookings = false): { removedBookings: number; removedClosures: number } {
+    const beforeB = this.data.bookings.length;
+    const beforeC = this.data.closures.length;
+
+    if (clearAllBookings) {
+      this.data.bookings = [];
+      this.data.closures = [];
+    } else {
+      // Remove all bookings and closures marked as demo or with demo- prefix
+      this.data.bookings = this.data.bookings.filter(b => !b.isDemo && !b.id.startsWith('demo-'));
+      this.data.closures = this.data.closures.filter(c => !c.id.startsWith('demo-'));
+    }
+
+    const removedBookings = beforeB - this.data.bookings.length;
+    const removedClosures = beforeC - this.data.closures.length;
+
+    this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      if (clearAllBookings) {
+        prisma.booking.deleteMany().catch(() => {});
+        prisma.fieldClosure.deleteMany().catch(() => {});
+      } else {
+        prisma.booking.deleteMany({ where: { isDemo: true } }).catch(() => {});
+        prisma.fieldClosure.deleteMany({ where: { isDemo: true } }).catch(() => {});
+      }
+    }
+
+    return { removedBookings, removedClosures };
   }
 }
 

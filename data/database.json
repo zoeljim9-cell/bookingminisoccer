@@ -155,6 +155,36 @@
       "totalPrice": 300000,
       "createdAt": "2026-09-22T01:34:09.480Z",
       "updatedAt": "2026-09-22T01:34:09.480Z"
+    },
+    {
+      "id": "27b4acb2-1e38-4e17-b21d-6ce743ef32d3",
+      "bookingCode": "MS-260922-B17E",
+      "secretToken": "e6ccffca-19e6-48b1-9af2-c5f9321062de",
+      "date": "2026-09-22",
+      "startTime": "21:00",
+      "endTime": "23:00",
+      "durationMinutes": 120,
+      "customerName": "Zoel JIM",
+      "customerWhatsapp": "081271386101",
+      "teamName": "",
+      "notes": "",
+      "bookingSource": "online",
+      "bookingStatus": "confirmed",
+      "paymentStatus": "unpaid",
+      "priceBreakdown": [
+        {
+          "fromTime": "21:00",
+          "toTime": "23:00",
+          "durationMinutes": 120,
+          "hourlyRate": 350000,
+          "amount": 700000,
+          "rateName": "Tarif Malam (Peak Hour)"
+        }
+      ],
+      "totalPrice": 700000,
+      "createdAt": "2026-09-22T08:50:09.798Z",
+      "updatedAt": "2026-09-22T08:50:09.798Z",
+      "idempotencyKey": "idem-1790067009636-rdx3rdp"
     }
   ],
   "closures": [

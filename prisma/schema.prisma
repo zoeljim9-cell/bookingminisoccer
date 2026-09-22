@@ -1,0 +1,69 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model VenueSetting {
+  id                 String   @id @default("default")
+  name               String   @default("MiniSoccer Arena")
+  address            String   @default("Jl. Lapangan Hijau No. 10, Jakarta Selatan")
+  gmapsUrl           String   @default("https://maps.google.com")
+  ownerWhatsapp      String   @default("6281234567890")
+  ownerPin           String   @default("1234")
+  openTime           String   @default("07:00")
+  closeTime          String   @default("23:00")
+  closedDays         String   @default("[]")
+  maxAdvanceDays     Int      @default(30)
+  minDurationMinutes Int      @default(60)
+  allowedDurations   String   @default("[60,90,120,180]")
+  bufferMinutes      Int      @default(0)
+  baseHourlyRate     Int      @default(300000)
+  specialRates       String   @db.Text
+  paymentTerms       String   @db.Text
+  cancellationPolicy String   @db.Text
+  updatedAt          DateTime @updatedAt
+}
+
+model Booking {
+  id                 String   @id @default(uuid())
+  bookingCode        String   @unique
+  secretToken        String
+  date               String   // YYYY-MM-DD
+  startTime          String   // HH:mm
+  endTime            String   // HH:mm
+  durationMinutes    Int
+  customerName       String
+  customerWhatsapp   String
+  teamName           String?
+  notes              String?  @db.Text
+  bookingSource      String   @default("online")
+  bookingStatus      String   @default("confirmed")
+  paymentStatus      String   @default("unpaid")
+  priceBreakdown     String   @db.Text
+  totalPrice         Int
+  cancellationReason String?  @db.Text
+  idempotencyKey     String?
+  isDemo             Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([date])
+  @@index([bookingCode])
+  @@index([secretToken])
+}
+
+model FieldClosure {
+  id        String   @id @default(uuid())
+  date      String   // YYYY-MM-DD
+  startTime String   // HH:mm
+  endTime   String   // HH:mm
+  reason    String   @db.Text
+  isDemo    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}

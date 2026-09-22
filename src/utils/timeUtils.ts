@@ -418,3 +418,34 @@ export function generatePublicSchedule(
 
   return { slots, freeRanges, isFull };
 }
+
+/**
+ * Normalizes any Indonesian WhatsApp/phone number into international format without '+' or '0' (e.g. 6281234567890)
+ * Works with 0812..., +62812..., 62812..., 812..., with spaces or dashes.
+ */
+export function normalizeWhatsappNumber(rawPhone: string): string {
+  if (!rawPhone) return '';
+  let digits = rawPhone.replace(/[^0-9]/g, '');
+  if (digits.startsWith('0')) {
+    digits = '62' + digits.slice(1);
+  } else if (digits.startsWith('8')) {
+    digits = '62' + digits;
+  }
+  return digits;
+}
+
+/**
+ * Format phone for display (e.g. +62 812-3456-7890)
+ */
+export function formatPhoneDisplay(rawPhone: string): string {
+  const norm = normalizeWhatsappNumber(rawPhone);
+  if (!norm) return rawPhone || '-';
+  if (norm.startsWith('62') && norm.length >= 9) {
+    const prefix = '+62';
+    const rest = norm.slice(2);
+    if (rest.length <= 4) return `${prefix} ${rest}`;
+    if (rest.length <= 8) return `${prefix} ${rest.slice(0, 3)}-${rest.slice(3)}`;
+    return `${prefix} ${rest.slice(0, 3)}-${rest.slice(3, 7)}-${rest.slice(7)}`;
+  }
+  return rawPhone;
+}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Copy, Check, MessageSquare, ExternalLink, X, ShieldAlert, Trophy } from 'lucide-react';
 import { Booking, VenueSettings } from '../types';
-import { formatDuration, formatIndonesianDate, formatRupiah } from '../utils/timeUtils';
+import { formatDuration, formatIndonesianDate, formatRupiah, normalizeWhatsappNumber } from '../utils/timeUtils';
 
 interface BookingSuccessModalProps {
   booking: Booking;
@@ -47,8 +47,8 @@ ${privateUrl}`;
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  // WhatsApp link preparation
-  const waTarget = settings.ownerWhatsapp.replace(/[^0-9]/g, '');
+  // WhatsApp link preparation (normalized to 628... international format)
+  const waTarget = normalizeWhatsappNumber(settings.ownerWhatsapp);
   const waMessage = encodeURIComponent(
     `Halo ${settings.name}, saya ingin konfirmasi booking lapangan mini soccer:\n\n` +
       `Kode Booking: *${booking.bookingCode}*\n` +

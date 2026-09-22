@@ -1,7 +1,7 @@
 import React from 'react';
 import { Clock, MapPin, ExternalLink, Phone, ShieldCheck, Sparkles, Check, ChevronDown, Award } from 'lucide-react';
 import { VenueSettings } from '../types';
-import { formatRupiah } from '../utils/timeUtils';
+import { formatRupiah, normalizeWhatsappNumber } from '../utils/timeUtils';
 
 interface HeroSectionProps {
   venue: VenueSettings | null;
@@ -15,8 +15,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ venue, onScrollToBooki
   const closeTime = venue?.closeTime || '23:00';
   const address = venue?.address || 'Jakarta Selatan';
   const gmapsUrl = venue?.gmapsUrl || '#';
-  const waTarget = (venue?.ownerWhatsapp || '').replace(/[^0-9]/g, '');
-  const waFormatted = waTarget.startsWith('0') ? '62' + waTarget.slice(1) : waTarget;
+  const waFormatted = normalizeWhatsappNumber(venue?.ownerWhatsapp || '');
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-stone-200/90 bg-stone-900 text-white shadow-sm" id="hero-section">

@@ -361,3 +361,45 @@ export async function ownerResetDemo(token: string): Promise<void> {
   });
   await handleApiResponse<any>(res, 'Gagal mereset data demo');
 }
+
+export async function ownerClearDemo(
+  token: string,
+  clearAll = false
+): Promise<{ removedBookings: number; removedClosures: number; message: string }> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/clear-demo`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ clearAll }),
+  });
+  const data = await handleApiResponse<{
+    success: boolean;
+    message: string;
+    result: { removedBookings: number; removedClosures: number };
+  }>(res, 'Gagal membersihkan data demo');
+  return { ...data.result, message: data.message };
+}
+
+export async function fetchDbStatus(token: string): Promise<{
+  connected: boolean;
+  provider: string;
+  hasDbUrl: boolean;
+  message: string;
+}> {
+  try {
+    const res = await safeFetchWithRetry(`${API_BASE}/owner/db-status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return await handleApiResponse<any>(res, 'Gagal mengambil status database');
+  } catch (err: any) {
+    return {
+      connected: false,
+      provider: 'local-file',
+      hasDbUrl: false,
+      message: err.message || 'Penyimpanan lokal aktif',
+    };
+  }
+}
+

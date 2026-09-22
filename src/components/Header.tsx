@@ -1,7 +1,7 @@
 import React from 'react';
 import { MapPin, Search, Phone, Trophy, ArrowRight, ShieldCheck } from 'lucide-react';
 import { VenueSettings } from '../types';
-import { formatRupiah } from '../utils/timeUtils';
+import { formatRupiah, normalizeWhatsappNumber } from '../utils/timeUtils';
 
 interface HeaderProps {
   venue: VenueSettings | null;
@@ -19,8 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   const venueName = venue?.name || 'MiniSoccer Arena';
   const baseRate = venue?.baseHourlyRate || 300000;
   const address = venue?.address || 'Jakarta Selatan';
-  const waTarget = (venue?.ownerWhatsapp || '').replace(/[^0-9]/g, '');
-  const waFormatted = waTarget.startsWith('0') ? '62' + waTarget.slice(1) : waTarget;
+  const waFormatted = normalizeWhatsappNumber(venue?.ownerWhatsapp || '');
 
   const handleBookingClick = () => {
     if (onScrollToBooking) {

@@ -211,8 +211,14 @@ export default function App() {
   if (currentPath === '/owner') {
     return (
       <OwnerPanel
-        onBackToCustomer={() => navigateTo('/')}
-        onScheduleUpdated={() => loadSchedule(selectedDate)}
+        onBackToCustomer={() => {
+          fetchVenueInfo().then(setVenue).catch(() => {});
+          navigateTo('/');
+        }}
+        onScheduleUpdated={() => {
+          fetchVenueInfo().then(setVenue).catch(() => {});
+          loadSchedule(selectedDate);
+        }}
       />
     );
   }

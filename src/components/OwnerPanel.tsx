@@ -26,21 +26,29 @@ import {
   ListFilter,
   Ban,
   ArrowLeft,
+  RotateCcw,
+  Loader2,
+  Database,
+  ExternalLink,
 } from 'lucide-react';
 import { Booking, BookingSource, BookingStatus, FieldClosure, PaymentStatus, SpecialRateRule, VenueSettings } from '../types';
 import {
   calculatePrice,
   formatDuration,
   formatIndonesianDate,
+  formatPhoneDisplay,
   formatRupiah,
   getJakartaDateString,
   minutesToTime,
+  normalizeWhatsappNumber,
   timeToMinutes,
 } from '../utils/timeUtils';
 import {
+  fetchDbStatus,
   fetchOwnerDashboard,
   ownerAddClosure,
   ownerCancelBooking,
+  ownerClearDemo,
   ownerCreateBooking,
   ownerDeleteClosure,
   ownerLogin,
@@ -743,13 +751,34 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
                   setSettings(newS);
                   showNotice('success', 'Pengaturan arena berhasil disimpan.');
                   loadDashboardData(token);
+                  if (onScheduleUpdated) {
+                    onScheduleUpdated();
+                  }
+                }}
+                onClearDemo={async () => {
+                  try {
+                    const result = await ownerClearDemo(token);
+                    showNotice(
+                      'success',
+                      result.message || `Data demo berhasil dibersihkan (${result.removedBookings} booking demo dihapus).`
+                    );
+                    loadDashboardData(token);
+                    if (onScheduleUpdated) {
+                      onScheduleUpdated();
+                    }
+                  } catch (err: any) {
+                    showNotice('error', err.message || 'Gagal membersihkan data demo.');
+                  }
                 }}
                 onResetDemo={async () => {
                   if (window.confirm('Apakah Anda yakin ingin mereset seluruh data ke data demo standar?')) {
                     try {
                       await ownerResetDemo(token);
-                      showNotice('success', 'Data demo berhasil direset.');
+                      showNotice('success', 'Data demo berhasil direset ke kondisi awal.');
                       loadDashboardData(token);
+                      if (onScheduleUpdated) {
+                        onScheduleUpdated();
+                      }
                     } catch (err: any) {
                       showNotice('error', err.message);
                     }
@@ -828,23 +857,88 @@ function OwnerSettingsForm({
   settings,
   token,
   onSaved,
+  onClearDemo,
   onResetDemo,
 }: {
   settings: VenueSettings;
   token: string;
   onSaved: (s: VenueSettings) => void;
+  onClearDemo: () => Promise<void>;
   onResetDemo: () => void;
 }) {
   const [formData, setFormData] = useState<VenueSettings>({ ...settings });
   const [saving, setSaving] = useState(false);
+  const [clearingDemo, setClearingDemo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dbStatus, setDbStatus] = useState<{
+    connected: boolean;
+    provider: string;
+    hasDbUrl: boolean;
+    message: string;
+  } | null>(null);
+  const [checkingDb, setCheckingDb] = useState(false);
+
+  // Keep form data synchronized if parent settings prop updates
+  useEffect(() => {
+    if (settings) {
+      setFormData({ ...settings });
+    }
+  }, [settings]);
+
+  const checkDb = async () => {
+    setCheckingDb(true);
+    try {
+      const s = await fetchDbStatus(token);
+      setDbStatus(s);
+    } catch {
+      // ignore
+    } finally {
+      setCheckingDb(false);
+    }
+  };
+
+  useEffect(() => {
+    checkDb();
+  }, [token]);
+
+  const handleClearDemo = async () => {
+    if (
+      window.confirm(
+        'Bersihkan semua data demo?\n\nSemua booking simulasi dan penutupan bertanda demo akan dihapus sehingga jadwal menjadi bersih untuk pelanggan riil. Pengaturan lapangan dan tarif tetap tersimpan.'
+      )
+    ) {
+      setClearingDemo(true);
+      try {
+        await onClearDemo();
+      } finally {
+        setClearingDemo(false);
+      }
+    }
+  };
+
+  const normalizedWhatsapp = normalizeWhatsappNumber(formData.ownerWhatsapp || '');
+  const isWhatsappValid = normalizedWhatsapp.length >= 10 && normalizedWhatsapp.length <= 15;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
+
+    const sanitizedWhatsapp = normalizeWhatsappNumber(formData.ownerWhatsapp);
+    if (!sanitizedWhatsapp || sanitizedWhatsapp.length < 10) {
+      setError('Nomor WhatsApp pengelola tidak valid. Harap gunakan nomor minimal 10 angka diawali 08... atau 62...');
+      setSaving(false);
+      return;
+    }
+
+    const payload: VenueSettings = {
+      ...formData,
+      ownerWhatsapp: sanitizedWhatsapp,
+    };
+
     try {
-      const updated = await ownerUpdateSettings(token, formData);
+      const updated = await ownerUpdateSettings(token, payload);
+      setFormData({ ...updated });
       onSaved(updated);
     } catch (err: any) {
       setError(err.message || 'Gagal menyimpan pengaturan.');
@@ -897,8 +991,38 @@ function OwnerSettingsForm({
               required
             />
             <p className="text-[11px] text-slate-600 mt-1.5 leading-relaxed">
-              Nomor ini digunakan pelanggan untuk konfirmasi booking otomatis dan chat WhatsApp langsung setelah booking selesai. Gunakan format diawali <strong>08...</strong> atau <strong>62...</strong>
+              Nomor ini digunakan pelanggan untuk konfirmasi booking otomatis dan chat WhatsApp langsung setelah booking selesai.
             </p>
+
+            {/* Live WhatsApp preview and test button */}
+            <div className="mt-2.5 pt-2 border-t border-emerald-200/70 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] text-slate-700 flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-emerald-800">Format internasional:</span>
+                <code className="bg-white/90 px-2 py-0.5 rounded border border-emerald-300 font-mono font-bold text-emerald-900">
+                  +{normalizedWhatsapp || '-'}
+                </code>
+                {isWhatsappValid ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-700 font-bold bg-emerald-100/90 px-1.5 py-0.5 rounded text-[10px]">
+                    <CheckCircle className="w-3 h-3" /> Valid ({formatPhoneDisplay(normalizedWhatsapp)})
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-amber-700 font-bold bg-amber-100/90 px-1.5 py-0.5 rounded text-[10px]">
+                    <AlertTriangle className="w-3 h-3" /> Min 10 angka
+                  </span>
+                )}
+              </div>
+              {isWhatsappValid && (
+                <a
+                  href={`https://wa.me/${normalizedWhatsapp}?text=${encodeURIComponent(`Halo, ini uji coba nomor WhatsApp admin ${formData.name}.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-white hover:bg-emerald-100 rounded-md border border-emerald-300 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <span>Tes Link WhatsApp</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
           </div>
           <div className="sm:col-span-2">
             <label className="block font-bold text-slate-700 mb-1">Alamat Lengkap</label>
@@ -1043,16 +1167,171 @@ function OwnerSettingsForm({
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-        <button
-          type="button"
-          onClick={onResetDemo}
-          className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl border border-rose-200 transition-colors cursor-pointer"
-        >
-          Reset Seluruh Data ke Demo Awal
-        </button>
+      {/* 5. Manajemen Data Demo & Pemeliharaan */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3" id="section-demo-data-management">
+        <div>
+          <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Manajemen Data Demo & Simulasi</span>
+          </h4>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Kelola data simulasi contoh bawaan agar jadwal lapangan bersih dan siap digunakan untuk menerima booking pelanggan riil.
+          </p>
+        </div>
 
+        <div className="space-y-2.5">
+          {/* Card: Bersihkan Data Demo */}
+          <div className="bg-rose-50/50 rounded-xl p-3.5 border border-rose-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                <span>Bersihkan Data Demo</span>
+                <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.5 rounded border border-rose-200">
+                  Operasional Bersih
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-600">
+                Menghapus semua booking dan penutupan berlabel demo dari jadwal. Pengaturan lapangan, jam buka, dan tarif tetap dipertahankan.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              id="btn-clear-demo-data"
+              disabled={clearingDemo}
+              onClick={handleClearDemo}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap min-h-[40px]"
+            >
+              {clearingDemo ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Membersihkan...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Bersihkan Data Demo</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Card: Reset ke Demo Awal */}
+          <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="space-y-0.5">
+              <div className="text-xs font-semibold text-slate-800">
+                Kembalikan Data Contoh (Reset Demo)
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Mengembalikan jadwal dan konfigurasi ke set sampel bawaan awal aplikasi.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              id="btn-reset-demo-data"
+              onClick={onResetDemo}
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 border border-slate-300 rounded-lg transition-colors cursor-pointer whitespace-nowrap min-h-[36px]"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Reset ke Demo Awal</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Database MySQL & Prisma (Vercel Ready) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3.5" id="settings-database-section">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-200">
+              <Database className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                Database MySQL & Prisma
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Didukung driver mysql2 untuk kompatibilitas penuh deployment Vercel Serverless
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={checkingDb}
+            onClick={checkDb}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${checkingDb ? 'animate-spin' : ''}`} />
+            <span>Cek Status Database</span>
+          </button>
+        </div>
+
+        {/* Database Status Banner */}
+        <div
+          className={`p-3 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+            dbStatus?.connected
+              ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+              : 'bg-amber-50/80 border-amber-300 text-amber-900'
+          }`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`w-2.5 h-2.5 rounded-full ${
+                  dbStatus?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}
+              />
+              <span className="font-bold">
+                {dbStatus?.connected
+                  ? 'MySQL Aktif & Terhubung (Prisma ORM)'
+                  : 'Mode Berkas Lokal (database.json) Aktif'}
+              </span>
+            </div>
+            <p className="text-[11px] opacity-90 leading-relaxed">
+              {dbStatus?.message ||
+                'Database lokal aktif. Untuk menghubungkan ke database MySQL di cloud (PlanetScale, Railway, TiDB, Aiven, RDS), masukkan variabel DATABASE_URL.'}
+            </p>
+          </div>
+
+          <div className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded bg-white/80 border border-current self-start sm:self-auto shrink-0">
+            driver: mysql2 | orm: prisma
+          </div>
+        </div>
+
+        {/* Quick Instructions for Push & Vercel */}
+        <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 text-xs space-y-2.5">
+          <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">
+            Langkah Sinkronisasi & Deploy Vercel:
+          </div>
+          <ol className="list-decimal list-inside space-y-1.5 text-slate-600 text-[11px] leading-relaxed">
+            <li>
+              <strong>Push skema database:</strong> Jalankan perintah{' '}
+              <code className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono text-slate-800">
+                npm run db:push
+              </code>{' '}
+              atau{' '}
+              <code className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-mono text-slate-800">
+                npx prisma db push
+              </code>{' '}
+              untuk membuat tabel di instance MySQL.
+            </li>
+            <li>
+              <strong>Deploy ke Vercel:</strong> Pada dashboard Vercel, buka menu{' '}
+              <em>Settings &rarr; Environment Variables</em> dan tambahkan:
+              <div className="mt-1 p-2 bg-slate-900 text-emerald-400 font-mono text-[10.5px] rounded-lg break-all">
+                DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DATABASE?sslaccept=strict"
+              </div>
+            </li>
+            <li>
+              Data pengaturan WhatsApp pengelola, jam operasional, booking, dan penutupan akan otomatis tersimpan permanen di MySQL dan disinkronkan secara aman.
+            </li>
+          </ol>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
         <button
           type="submit"
           disabled={saving}
