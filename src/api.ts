@@ -56,7 +56,7 @@ async function handleApiResponse<T>(res: Response, fallbackError: string): Promi
       data = JSON.parse(text);
     } catch {
       // Body is not valid JSON (e.g., plain text "Rate exceeded.", gateway errors, HTML)
-      const cleanText = text.trim();
+      let cleanText = text.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim().slice(0, 150);
       if (!res.ok) {
         if (res.status === 429 || cleanText.toLowerCase().includes('rate')) {
           throw new Error('Terlalu banyak permintaan (Batas frekuensi terlampaui). Harap tunggu beberapa saat lalu coba lagi.');
@@ -64,17 +64,24 @@ async function handleApiResponse<T>(res: Response, fallbackError: string): Promi
         if (res.status >= 500) {
           throw new Error(`Server sedang sibuk (${res.status}). Silakan coba beberapa saat lagi.`);
         }
-        throw new Error(cleanText || fallbackError);
+        if (cleanText.toLowerCase().includes('not found') || res.status === 404) {
+          throw new Error(`Rute layanan API tidak ditemukan (Status 404). Pastikan konfigurasi Vercel sudah sesuai.`);
+        }
+        if (res.status === 405) {
+          throw new Error(`Metode permintaan tidak diizinkan oleh server (Status 405).`);
+        }
+        throw new Error(cleanText || `${fallbackError} (Status ${res.status})`);
       }
       throw new Error('Respon dari server tidak valid.');
     }
   }
 
   if (!res.ok) {
+    const errorMsg = data?.error || data?.message || (typeof data === 'string' ? data : null);
     if (res.status === 429) {
-      throw new Error(data?.error || 'Terlalu banyak permintaan. Harap tunggu beberapa saat sebelum mencoba lagi.');
+      throw new Error(errorMsg || 'Terlalu banyak permintaan. Harap tunggu beberapa saat sebelum mencoba lagi.');
     }
-    throw new Error(data?.error || fallbackError);
+    throw new Error(errorMsg || fallbackError);
   }
 
   return data as T;

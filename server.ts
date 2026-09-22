@@ -41,13 +41,20 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use((req: Request, res: Response, next: NextFunction) => {
   const matchedPath = req.headers['x-matched-path'] as string | undefined;
   if (matchedPath && matchedPath.startsWith('/api/')) {
-    req.url = matchedPath.replace(/^\/api/, '');
+    const stripped = matchedPath.replace(/^\/api/, '');
+    req.url = stripped.startsWith('/') ? stripped : '/' + stripped;
   } else if (req.query && typeof req.query['0'] === 'string') {
     req.url = '/' + req.query['0'].replace(/^\/+/, '');
   } else if (req.query && req.query.all) {
     const segments = Array.isArray(req.query.all) ? req.query.all.join('/') : req.query.all;
     req.url = '/' + String(segments).replace(/^\/+/, '');
   }
+
+  // Ensure req.url always begins with /
+  if (!req.url || !req.url.startsWith('/')) {
+    req.url = '/' + (req.url || '');
+  }
+
   next();
 });
 

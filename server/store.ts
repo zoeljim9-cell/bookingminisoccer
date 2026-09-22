@@ -334,10 +334,10 @@ class Store {
       const datePart = input.date.replace(/-/g, '').slice(2); // e.g. 260921
       const randPart = crypto.randomBytes(2).toString('hex').toUpperCase();
       const bookingCode = `MS-${datePart}-${randPart}`;
-      const secretToken = crypto.randomUUID();
+      const secretToken = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
 
       const newBooking: Booking = {
-        id: crypto.randomUUID(),
+        id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `b-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
         bookingCode,
         secretToken,
         date: input.date,
