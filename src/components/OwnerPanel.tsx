@@ -1167,15 +1167,15 @@ function OwnerSettingsForm({
         </div>
       </div>
 
-      {/* 5. Manajemen Data Demo & Pemeliharaan */}
+      {/* 5. Manajemen Data & Status Produksi */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3" id="section-demo-data-management">
         <div>
           <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-            <span>Manajemen Data Demo & Simulasi</span>
+            <span>Manajemen Data Lapangan & Mode Produksi</span>
           </h4>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            Kelola data simulasi contoh bawaan agar jadwal lapangan bersih dan siap digunakan untuk menerima booking pelanggan riil.
+            Pastikan data jadwal lapangan bersih dan siap menerima pesanan riil. Saat MySQL terhubung, MySQL menjadi <strong>First Source of Truth</strong> permanen tanpa akan pernah ter-reset saat build/deploy.
           </p>
         </div>
 
@@ -1186,11 +1186,11 @@ function OwnerSettingsForm({
               <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
                 <span>Bersihkan Data Demo</span>
                 <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-1.5 py-0.5 rounded border border-rose-200">
-                  Operasional Bersih
+                  Siap Produksi
                 </span>
               </div>
               <div className="text-[11px] text-slate-600">
-                Menghapus semua booking dan penutupan berlabel demo dari jadwal. Pengaturan lapangan, jam buka, dan tarif tetap dipertahankan.
+                Menghapus semua booking dan penutupan berlabel demo dari jadwal. Pengaturan lapangan, jam operasional, dan tarif tetap utuh dipertahankan.
               </div>
             </div>
 
@@ -1215,14 +1215,14 @@ function OwnerSettingsForm({
             </button>
           </div>
 
-          {/* Card: Reset ke Demo Awal */}
+          {/* Card: Reset ke Demo Awal (Hanya untuk testing jika dibutuhkan) */}
           <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="space-y-0.5">
               <div className="text-xs font-semibold text-slate-800">
-                Kembalikan Data Contoh (Reset Demo)
+                Kembalikan Data Contoh (Testing Saja)
               </div>
               <div className="text-[11px] text-slate-500">
-                Mengembalikan jadwal dan konfigurasi ke set sampel bawaan awal aplikasi.
+                Hanya gunakan opsi ini jika Anda sengaja ingin memasukkan kembali data simulasi contoh untuk pengujian internal.
               </div>
             </div>
 
@@ -1233,7 +1233,7 @@ function OwnerSettingsForm({
               className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 border border-slate-300 rounded-lg transition-colors cursor-pointer whitespace-nowrap min-h-[36px]"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Reset ke Demo Awal</span>
+              <span>Reset Contoh Uji Coba</span>
             </button>
           </div>
         </div>

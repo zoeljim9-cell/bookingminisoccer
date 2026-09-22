@@ -41,53 +41,22 @@
   },
   "bookings": [
     {
-      "id": "demo-b1",
-      "bookingCode": "MS-2609-A101",
-      "secretToken": "demo-token-1111-aaaa-bbbb",
+      "id": "27b4acb2-1e38-4e17-b21d-6ce743ef32d3",
+      "bookingCode": "MS-260922-B17E",
+      "secretToken": "e6ccffca-19e6-48b1-9af2-c5f9321062de",
       "date": "2026-09-22",
-      "startTime": "14:45",
-      "endTime": "16:15",
-      "durationMinutes": 90,
-      "customerName": "Budi Santoso",
-      "customerWhatsapp": "081234567891",
-      "teamName": "Garuda FC",
-      "notes": "Rompi disediakan pihak lapangan ya min",
+      "startTime": "21:00",
+      "endTime": "23:00",
+      "durationMinutes": 120,
+      "customerName": "Zoel JIM",
+      "customerWhatsapp": "081271386101",
       "bookingSource": "online",
       "bookingStatus": "confirmed",
       "paymentStatus": "unpaid",
       "priceBreakdown": [
         {
-          "fromTime": "14:45",
-          "toTime": "16:15",
-          "durationMinutes": 90,
-          "hourlyRate": 300000,
-          "amount": 450000,
-          "rateName": "Tarif Dasar"
-        }
-      ],
-      "totalPrice": 450000,
-      "createdAt": "2026-09-22T01:28:47.941Z",
-      "updatedAt": "2026-09-22T01:28:47.941Z",
-      "isDemo": true
-    },
-    {
-      "id": "demo-b2",
-      "bookingCode": "MS-2609-A102",
-      "secretToken": "demo-token-2222-cccc-dddd",
-      "date": "2026-09-22",
-      "startTime": "19:00",
-      "endTime": "21:00",
-      "durationMinutes": 120,
-      "customerName": "Reza Pratama",
-      "customerWhatsapp": "081987654321",
-      "teamName": "Senayan Ballers",
-      "bookingSource": "whatsapp",
-      "bookingStatus": "confirmed",
-      "paymentStatus": "paid",
-      "priceBreakdown": [
-        {
-          "fromTime": "19:00",
-          "toTime": "21:00",
+          "fromTime": "21:00",
+          "toTime": "23:00",
           "durationMinutes": 120,
           "hourlyRate": 350000,
           "amount": 700000,
@@ -95,38 +64,10 @@
         }
       ],
       "totalPrice": 700000,
-      "createdAt": "2026-09-22T01:28:47.941Z",
-      "updatedAt": "2026-09-22T01:28:47.941Z",
-      "isDemo": true
-    },
-    {
-      "id": "demo-b3",
-      "bookingCode": "MS-2609-A103",
-      "secretToken": "demo-token-3333-eeee-ffff",
-      "date": "2026-09-23",
-      "startTime": "16:00",
-      "endTime": "18:00",
-      "durationMinutes": 120,
-      "customerName": "Dimas Setiawan",
-      "customerWhatsapp": "085712345678",
-      "teamName": "Kelapa Gading United",
-      "bookingSource": "phone",
-      "bookingStatus": "confirmed",
-      "paymentStatus": "unpaid",
-      "priceBreakdown": [
-        {
-          "fromTime": "16:00",
-          "toTime": "18:00",
-          "durationMinutes": 120,
-          "hourlyRate": 300000,
-          "amount": 600000,
-          "rateName": "Tarif Dasar"
-        }
-      ],
-      "totalPrice": 600000,
-      "createdAt": "2026-09-22T01:28:47.941Z",
-      "updatedAt": "2026-09-22T01:28:47.941Z",
-      "isDemo": true
+      "idempotencyKey": "idem-1790067009636-rdx3rdp",
+      "isDemo": false,
+      "createdAt": "2026-09-22T09:30:08.930Z",
+      "updatedAt": "2026-09-22T09:30:08.930Z"
     },
     {
       "id": "9ba3c986-9fae-470d-a033-82d5e90bcd25",
@@ -153,49 +94,10 @@
         }
       ],
       "totalPrice": 300000,
-      "createdAt": "2026-09-22T01:34:09.480Z",
-      "updatedAt": "2026-09-22T01:34:09.480Z"
-    },
-    {
-      "id": "27b4acb2-1e38-4e17-b21d-6ce743ef32d3",
-      "bookingCode": "MS-260922-B17E",
-      "secretToken": "e6ccffca-19e6-48b1-9af2-c5f9321062de",
-      "date": "2026-09-22",
-      "startTime": "21:00",
-      "endTime": "23:00",
-      "durationMinutes": 120,
-      "customerName": "Zoel JIM",
-      "customerWhatsapp": "081271386101",
-      "teamName": "",
-      "notes": "",
-      "bookingSource": "online",
-      "bookingStatus": "confirmed",
-      "paymentStatus": "unpaid",
-      "priceBreakdown": [
-        {
-          "fromTime": "21:00",
-          "toTime": "23:00",
-          "durationMinutes": 120,
-          "hourlyRate": 350000,
-          "amount": 700000,
-          "rateName": "Tarif Malam (Peak Hour)"
-        }
-      ],
-      "totalPrice": 700000,
-      "createdAt": "2026-09-22T08:50:09.798Z",
-      "updatedAt": "2026-09-22T08:50:09.798Z",
-      "idempotencyKey": "idem-1790067009636-rdx3rdp"
+      "isDemo": false,
+      "createdAt": "2026-09-22T09:30:08.913Z",
+      "updatedAt": "2026-09-22T09:30:08.913Z"
     }
   ],
-  "closures": [
-    {
-      "id": "demo-c1",
-      "date": "2026-09-22",
-      "startTime": "11:45",
-      "endTime": "13:00",
-      "reason": "Perawatan Rumput & Penyiraman",
-      "createdAt": "2026-09-22T01:28:47.941Z",
-      "isDemo": true
-    }
-  ]
+  "closures": []
 }

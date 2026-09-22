@@ -177,10 +177,19 @@ class Store {
   private data: DatabaseSchema;
   private locks = new Map<string, Promise<void>>();
   private idempotencyCache = new Map<string, { booking: Booking; timestamp: number }>();
+  public readonly isMySqlConfigured: boolean;
 
   constructor() {
-    this.data = this.loadFromDisk();
-    // Initialize MySQL Prisma sync if DATABASE_URL is provided
+    this.isMySqlConfigured = Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== '');
+
+    // If MySQL is configured, start clean without injecting demo fixtures into state
+    if (this.isMySqlConfigured) {
+      this.data = this.loadFromDiskClean();
+    } else {
+      this.data = this.loadFromDisk();
+    }
+
+    // Initialize MySQL Prisma sync as primary source of truth
     this.initPrismaSync().catch((err) => {
       console.warn('[Prisma] Inisialisasi awal database dilewati:', err.message);
     });
@@ -190,7 +199,7 @@ class Store {
     const prisma = getPrismaClient();
     if (!prisma) return;
     try {
-      // 1. Sync settings
+      // 1. Sync settings - MySQL is Source of Truth
       const dbSetting = await prisma.venueSetting.findUnique({ where: { id: 'default' } });
       if (dbSetting) {
         this.data.settings = mapDbToSettings(dbSetting, this.data.settings);
@@ -200,23 +209,28 @@ class Store {
         });
       }
 
-      // 2. Sync bookings
+      // 2. Sync bookings - MySQL is primary Source of Truth
       const count = await prisma.booking.count();
       if (count > 0) {
         const dbBookings = await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } });
+        // MySQL is the absolute truth for bookings: replace in-memory data with MySQL rows
         this.data.bookings = dbBookings.map(mapDbToBooking);
-      } else if (this.data.bookings.length > 0) {
+      } else if (!this.isMySqlConfigured && this.data.bookings.length > 0) {
+        // Only seed to DB if MySQL was not configured as production source of truth
         for (const b of this.data.bookings) {
           await prisma.booking.create({ data: mapBookingToDb(b) }).catch(() => {});
         }
+      } else if (this.isMySqlConfigured) {
+        // If MySQL has 0 bookings in production, keep bookings empty (no demo data injection)
+        this.data.bookings = [];
       }
 
-      // 3. Sync closures
+      // 3. Sync closures - MySQL is primary Source of Truth
       const closureCount = await prisma.fieldClosure.count();
       if (closureCount > 0) {
         const dbClosures = await prisma.fieldClosure.findMany();
         this.data.closures = dbClosures.map(mapDbToClosure);
-      } else if (this.data.closures.length > 0) {
+      } else if (!this.isMySqlConfigured && this.data.closures.length > 0) {
         for (const c of this.data.closures) {
           await prisma.fieldClosure.create({
             data: {
@@ -229,13 +243,44 @@ class Store {
             },
           }).catch(() => {});
         }
+      } else if (this.isMySqlConfigured) {
+        this.data.closures = [];
       }
 
       this.saveToDisk(this.data);
-      console.log('[Store] Berhasil sinkronisasi dengan database MySQL via Prisma.');
+      console.log('[Store] Berhasil sinkronisasi dengan database MySQL via Prisma (MySQL is Source of Truth).');
     } catch (err: any) {
       console.warn('[Store] MySQL Prisma sync skipped (tabel belum siap atau db:push diperlukan):', err.message);
     }
+  }
+
+  private loadFromDiskClean(): DatabaseSchema {
+    try {
+      if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      }
+      if (fs.existsSync(DB_FILE)) {
+        const content = fs.readFileSync(DB_FILE, 'utf-8');
+        const parsed = JSON.parse(content);
+        // Exclude demo records
+        const nonDemoBookings = (parsed.bookings || []).filter((b: any) => !b.isDemo && !b.id?.startsWith('demo-'));
+        const nonDemoClosures = (parsed.closures || []).filter((c: any) => !c.isDemo && !c.id?.startsWith('demo-'));
+        return {
+          settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+          bookings: nonDemoBookings,
+          closures: nonDemoClosures,
+        };
+      }
+    } catch (err) {
+      console.warn('Could not read db file, initializing with clean schema', err);
+    }
+    const clean: DatabaseSchema = {
+      settings: { ...DEFAULT_SETTINGS },
+      bookings: [],
+      closures: [],
+    };
+    this.saveToDisk(clean);
+    return clean;
   }
 
   private loadFromDisk(): DatabaseSchema {
@@ -254,6 +299,16 @@ class Store {
       }
     } catch (err) {
       console.warn('Could not read db file, initializing with demo data', err);
+    }
+    // When DATABASE_URL is configured, do not create demo data on disk
+    if (this.isMySqlConfigured) {
+      const clean: DatabaseSchema = {
+        settings: { ...DEFAULT_SETTINGS },
+        bookings: [],
+        closures: [],
+      };
+      this.saveToDisk(clean);
+      return clean;
     }
     const initial = getInitialDemoData();
     this.saveToDisk(initial);
@@ -508,6 +563,25 @@ class Store {
         booking.updatedAt = new Date().toISOString();
 
         this.saveToDisk(this.data);
+
+        const prisma = getPrismaClient();
+        if (prisma) {
+          prisma.booking
+            .updateMany({
+              where: { id },
+              data: {
+                date: newDate,
+                startTime: newStartTime,
+                endTime: endTimeStr,
+                durationMinutes: newDurationMinutes,
+                priceBreakdown: JSON.stringify(priceCalc.segments),
+                totalPrice: priceCalc.totalPrice,
+                updatedAt: new Date(booking.updatedAt),
+              },
+            })
+            .catch((e) => console.warn('[Prisma] Gagal update jadwal booking di MySQL:', e.message));
+        }
+
         return booking;
       });
     });
@@ -527,6 +601,23 @@ class Store {
     booking.updatedAt = new Date().toISOString();
 
     this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      prisma.booking
+        .updateMany({
+          where: { id },
+          data: {
+            customerName: booking.customerName,
+            customerWhatsapp: booking.customerWhatsapp,
+            teamName: booking.teamName || null,
+            notes: booking.notes || null,
+            updatedAt: new Date(booking.updatedAt),
+          },
+        })
+        .catch((e) => console.warn('[Prisma] Gagal update detail kontak di MySQL:', e.message));
+    }
+
     return booking;
   }
 
