@@ -393,11 +393,11 @@ apiRouter.put('/owner/bookings/:id/schedule', requireOwnerAuth, async (req: Requ
 });
 
 // Owner Update Contact / Notes
-apiRouter.put('/owner/bookings/:id/contact', requireOwnerAuth, (req: Request, res: Response) => {
+apiRouter.put('/owner/bookings/:id/contact', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { customerName, customerWhatsapp, teamName, notes } = req.body || {};
-    const updated = store.updateBookingDetails(id, { customerName, customerWhatsapp, teamName, notes });
+    const updated = await store.updateBookingDetails(id, { customerName, customerWhatsapp, teamName, notes });
     res.json({ success: true, booking: updated });
   } catch (err: any) {
     console.error('Update contact error:', err);
@@ -406,14 +406,14 @@ apiRouter.put('/owner/bookings/:id/contact', requireOwnerAuth, (req: Request, re
 });
 
 // Owner Update Payment Status
-apiRouter.put('/owner/bookings/:id/payment', requireOwnerAuth, (req: Request, res: Response) => {
+apiRouter.put('/owner/bookings/:id/payment', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { paymentStatus } = req.body || {};
     if (!['paid', 'unpaid'].includes(paymentStatus)) {
       return res.status(400).json({ error: 'Status pembayaran harus paid atau unpaid.' });
     }
-    const updated = store.updatePaymentStatus(id, paymentStatus);
+    const updated = await store.updatePaymentStatus(id, paymentStatus);
     res.json({ success: true, booking: updated });
   } catch (err: any) {
     console.error('Update payment error:', err);
@@ -422,11 +422,11 @@ apiRouter.put('/owner/bookings/:id/payment', requireOwnerAuth, (req: Request, re
 });
 
 // Owner Cancel Booking
-apiRouter.post('/owner/bookings/:id/cancel', requireOwnerAuth, (req: Request, res: Response) => {
+apiRouter.post('/owner/bookings/:id/cancel', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { reason } = req.body || {};
-    const updated = store.cancelBooking(id, reason);
+    const updated = await store.cancelBooking(id, reason);
     res.json({ success: true, booking: updated });
   } catch (err: any) {
     console.error('Cancel booking error:', err);
@@ -435,13 +435,13 @@ apiRouter.post('/owner/bookings/:id/cancel', requireOwnerAuth, (req: Request, re
 });
 
 // Owner Add Field Closure
-apiRouter.post('/owner/closures', requireOwnerAuth, (req: Request, res: Response) => {
+apiRouter.post('/owner/closures', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
     const { date, startTime, endTime, reason } = req.body || {};
     if (!date || !startTime || !endTime || !reason) {
       return res.status(400).json({ error: 'Semua kolom penutupan wajib diisi.' });
     }
-    const closure = store.addClosure(date, startTime, endTime, reason);
+    const closure = await store.addClosure(date, startTime, endTime, reason);
     res.status(201).json({ success: true, closure });
   } catch (err: any) {
     console.error('Closure error:', err);
@@ -450,10 +450,10 @@ apiRouter.post('/owner/closures', requireOwnerAuth, (req: Request, res: Response
 });
 
 // Owner Delete Field Closure
-apiRouter.delete('/owner/closures/:id', requireOwnerAuth, (req: Request, res: Response) => {
+apiRouter.delete('/owner/closures/:id', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    store.removeClosure(id);
+    await store.removeClosure(id);
     res.json({ success: true });
   } catch (err: any) {
     console.error('Delete closure error:', err);
@@ -462,13 +462,31 @@ apiRouter.delete('/owner/closures/:id', requireOwnerAuth, (req: Request, res: Re
 });
 
 // Owner Update Settings
-apiRouter.put('/owner/settings', requireOwnerAuth, (req: Request, res: Response) => {
+apiRouter.put('/owner/settings', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
-    const updatedSettings = store.updateSettings(req.body || {});
-    res.json({ success: true, settings: updatedSettings });
+    const result = await store.updateSettings(req.body || {});
+    res.json({
+      success: true,
+      settings: result.settings,
+      mysqlSynced: result.mysqlSynced,
+      mysqlError: result.mysqlError,
+      message: result.mysqlSynced
+        ? 'Pengaturan venue berhasil diperbarui dan tersimpan di database MySQL.'
+        : 'Pengaturan venue tersimpan di sistem lokal' + (result.mysqlError ? ` (Catatan MySQL: ${result.mysqlError})` : ''),
+    });
   } catch (err: any) {
     console.error('Update settings error:', err);
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Owner Force Sync Settings to MySQL
+apiRouter.post('/owner/sync-settings-db', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const result = await store.syncSettingsToMySql();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -506,6 +524,7 @@ apiRouter.get('/owner/db-status', requireOwnerAuth, async (req: Request, res: Re
     res.json({
       success: true,
       connected: status.connected,
+      tablesReady: status.tablesReady !== false,
       provider: 'mysql',
       hasDbUrl: Boolean(process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== ''),
       message: status.message,
@@ -514,6 +533,7 @@ apiRouter.get('/owner/db-status', requireOwnerAuth, async (req: Request, res: Re
     res.json({
       success: true,
       connected: false,
+      tablesReady: false,
       provider: 'local-file',
       hasDbUrl: false,
       message: err.message || 'Koneksi database tidak aktif',

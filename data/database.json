@@ -3,7 +3,7 @@
     "name": "MiniSoccer Arena",
     "address": "Jl. Lapangan Hijau No. 18, Jakarta Selatan",
     "gmapsUrl": "https://maps.google.com/?q=Jakarta",
-    "ownerWhatsapp": "6281234567890",
+    "ownerWhatsapp": "6281271386101",
     "openTime": "07:00",
     "closeTime": "23:00",
     "closedDays": [],
@@ -41,62 +41,34 @@
   },
   "bookings": [
     {
-      "id": "27b4acb2-1e38-4e17-b21d-6ce743ef32d3",
-      "bookingCode": "MS-260922-B17E",
-      "secretToken": "e6ccffca-19e6-48b1-9af2-c5f9321062de",
+      "id": "e61e01aa-78c1-41fc-bae9-598bd6da967c",
+      "bookingCode": "MS-260922-1CE9",
+      "secretToken": "c6335366-77ff-4b96-b7a4-d1e88259c385",
       "date": "2026-09-22",
-      "startTime": "21:00",
-      "endTime": "23:00",
-      "durationMinutes": 120,
-      "customerName": "Zoel JIM",
-      "customerWhatsapp": "081271386101",
+      "startTime": "20:57",
+      "endTime": "21:57",
+      "durationMinutes": 60,
+      "customerName": "zulfatah",
+      "customerWhatsapp": "081271386105",
+      "teamName": "",
+      "notes": "",
       "bookingSource": "online",
       "bookingStatus": "confirmed",
       "paymentStatus": "unpaid",
       "priceBreakdown": [
         {
-          "fromTime": "21:00",
-          "toTime": "23:00",
-          "durationMinutes": 120,
+          "fromTime": "20:57",
+          "toTime": "21:57",
+          "durationMinutes": 60,
           "hourlyRate": 350000,
-          "amount": 700000,
+          "amount": 350000,
           "rateName": "Tarif Malam (Peak Hour)"
         }
       ],
-      "totalPrice": 700000,
-      "idempotencyKey": "idem-1790067009636-rdx3rdp",
-      "isDemo": false,
-      "createdAt": "2026-09-22T09:30:08.930Z",
-      "updatedAt": "2026-09-22T09:30:08.930Z"
-    },
-    {
-      "id": "9ba3c986-9fae-470d-a033-82d5e90bcd25",
-      "bookingCode": "MS-260922-3335",
-      "secretToken": "ff2c1835-db17-41cd-a889-ac728eac5329",
-      "date": "2026-09-22",
-      "startTime": "10:00",
-      "endTime": "11:00",
-      "durationMinutes": 60,
-      "customerName": "Test Vercel User",
-      "customerWhatsapp": "081234567890",
-      "teamName": "Vercel FC",
-      "bookingSource": "online",
-      "bookingStatus": "confirmed",
-      "paymentStatus": "unpaid",
-      "priceBreakdown": [
-        {
-          "fromTime": "10:00",
-          "toTime": "11:00",
-          "durationMinutes": 60,
-          "hourlyRate": 300000,
-          "amount": 300000,
-          "rateName": "Tarif Dasar"
-        }
-      ],
-      "totalPrice": 300000,
-      "isDemo": false,
-      "createdAt": "2026-09-22T09:30:08.913Z",
-      "updatedAt": "2026-09-22T09:30:08.913Z"
+      "totalPrice": 350000,
+      "createdAt": "2026-09-22T10:59:36.847Z",
+      "updatedAt": "2026-09-22T10:59:36.847Z",
+      "idempotencyKey": "idem-1790074776766-cwhcut0"
     }
   ],
   "closures": []

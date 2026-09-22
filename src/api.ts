@@ -341,7 +341,10 @@ export async function ownerDeleteClosure(token: string, id: string): Promise<voi
   await handleApiResponse<any>(res, 'Gagal menghapus penutupan');
 }
 
-export async function ownerUpdateSettings(token: string, settings: Partial<VenueSettings>): Promise<VenueSettings> {
+export async function ownerUpdateSettings(
+  token: string,
+  settings: Partial<VenueSettings>
+): Promise<{ settings: VenueSettings; mysqlSynced?: boolean; message?: string }> {
   const res = await safeFetchWithRetry(`${API_BASE}/owner/settings`, {
     method: 'PUT',
     headers: {
@@ -350,8 +353,33 @@ export async function ownerUpdateSettings(token: string, settings: Partial<Venue
     },
     body: JSON.stringify(settings),
   });
-  const data = await handleApiResponse<{ success: boolean; settings: VenueSettings }>(res, 'Gagal menyimpan pengaturan');
-  return data.settings;
+  const data = await handleApiResponse<{
+    success: boolean;
+    settings: VenueSettings;
+    mysqlSynced?: boolean;
+    message?: string;
+  }>(res, 'Gagal menyimpan pengaturan');
+  return {
+    settings: data.settings,
+    mysqlSynced: data.mysqlSynced,
+    message: data.message,
+  };
+}
+
+export async function ownerSyncSettingsToMySql(
+  token: string
+): Promise<{ success: boolean; message: string; settings: VenueSettings }> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/sync-settings-db`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return await handleApiResponse<{ success: boolean; message: string; settings: VenueSettings }>(
+    res,
+    'Gagal menyinkronkan pengaturan ke MySQL'
+  );
 }
 
 export async function ownerResetDemo(token: string): Promise<void> {
@@ -384,6 +412,7 @@ export async function ownerClearDemo(
 
 export async function fetchDbStatus(token: string): Promise<{
   connected: boolean;
+  tablesReady?: boolean;
   provider: string;
   hasDbUrl: boolean;
   message: string;
@@ -396,6 +425,7 @@ export async function fetchDbStatus(token: string): Promise<{
   } catch (err: any) {
     return {
       connected: false,
+      tablesReady: false,
       provider: 'local-file',
       hasDbUrl: false,
       message: err.message || 'Penyimpanan lokal aktif',

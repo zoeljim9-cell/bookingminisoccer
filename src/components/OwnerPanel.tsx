@@ -58,6 +58,7 @@ import {
   ownerUpdateContact,
   ownerUpdatePayment,
   ownerUpdateSettings,
+  ownerSyncSettingsToMySql,
 } from '../api';
 
 interface OwnerPanelProps {
@@ -747,9 +748,13 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
               <OwnerSettingsForm
                 settings={settings}
                 token={token}
-                onSaved={(newS) => {
+                onSaved={(newS, mysqlSynced, msg) => {
                   setSettings(newS);
-                  showNotice('success', 'Pengaturan arena berhasil disimpan.');
+                  if (mysqlSynced) {
+                    showNotice('success', 'Pengaturan arena berhasil disimpan dan disinkronkan ke database MySQL.');
+                  } else {
+                    showNotice('success', msg || 'Pengaturan arena berhasil disimpan.');
+                  }
                   loadDashboardData(token);
                   if (onScheduleUpdated) {
                     onScheduleUpdated();
@@ -862,16 +867,22 @@ function OwnerSettingsForm({
 }: {
   settings: VenueSettings;
   token: string;
-  onSaved: (s: VenueSettings) => void;
+  onSaved: (s: VenueSettings, mysqlSynced?: boolean, msg?: string) => void;
   onClearDemo: () => Promise<void>;
   onResetDemo: () => void;
 }) {
   const [formData, setFormData] = useState<VenueSettings>({ ...settings });
   const [saving, setSaving] = useState(false);
+  const [syncingDb, setSyncingDb] = useState(false);
+  const [dbSyncFeedback, setDbSyncFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
   const [clearingDemo, setClearingDemo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<{
     connected: boolean;
+    tablesReady?: boolean;
     provider: string;
     hasDbUrl: boolean;
     message: string;
@@ -901,6 +912,35 @@ function OwnerSettingsForm({
     checkDb();
   }, [token]);
 
+  const handleManualSyncDb = async () => {
+    setSyncingDb(true);
+    setDbSyncFeedback(null);
+    try {
+      const res = await ownerSyncSettingsToMySql(token);
+      if (res.success) {
+        setDbSyncFeedback({
+          type: 'success',
+          message: 'Sinkronisasi berhasil! Pengaturan venue (nama, WhatsApp, jam operasional, tarif) telah disimpan di database MySQL.',
+        });
+        setFormData({ ...res.settings });
+        onSaved(res.settings, true, res.message);
+      } else {
+        setDbSyncFeedback({
+          type: 'warning',
+          message: res.message || 'Gagal menyinkronkan ke MySQL.',
+        });
+      }
+      checkDb();
+    } catch (err: any) {
+      setDbSyncFeedback({
+        type: 'error',
+        message: err.message || 'Terjadi kesalahan saat menyinkronkan ke MySQL.',
+      });
+    } finally {
+      setSyncingDb(false);
+    }
+  };
+
   const handleClearDemo = async () => {
     if (
       window.confirm(
@@ -923,6 +963,7 @@ function OwnerSettingsForm({
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setDbSyncFeedback(null);
 
     const sanitizedWhatsapp = normalizeWhatsappNumber(formData.ownerWhatsapp);
     if (!sanitizedWhatsapp || sanitizedWhatsapp.length < 10) {
@@ -937,9 +978,21 @@ function OwnerSettingsForm({
     };
 
     try {
-      const updated = await ownerUpdateSettings(token, payload);
-      setFormData({ ...updated });
-      onSaved(updated);
+      const res = await ownerUpdateSettings(token, payload);
+      setFormData({ ...res.settings });
+      onSaved(res.settings, res.mysqlSynced, res.message);
+      if (res.mysqlSynced) {
+        setDbSyncFeedback({
+          type: 'success',
+          message: 'Pengaturan berhasil diperbarui dan tersimpan permanen di database MySQL (tabel VenueSetting).',
+        });
+      } else if (res.message) {
+        setDbSyncFeedback({
+          type: 'warning',
+          message: res.message,
+        });
+      }
+      checkDb();
     } catch (err: any) {
       setError(err.message || 'Gagal menyimpan pengaturan.');
     } finally {
@@ -1267,6 +1320,22 @@ function OwnerSettingsForm({
           </button>
         </div>
 
+        {/* Database Sync Feedback Banner */}
+        {dbSyncFeedback && (
+          <div
+            className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${
+              dbSyncFeedback.type === 'success'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : dbSyncFeedback.type === 'warning'
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-rose-50 border-rose-300 text-rose-900'
+            }`}
+          >
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-current" />
+            <div className="flex-1 font-semibold leading-relaxed">{dbSyncFeedback.message}</div>
+          </div>
+        )}
+
         {/* Database Status Banner */}
         <div
           className={`p-3 rounded-xl border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
@@ -1284,7 +1353,9 @@ function OwnerSettingsForm({
               />
               <span className="font-bold">
                 {dbStatus?.connected
-                  ? 'MySQL Aktif & Terhubung (Prisma ORM)'
+                  ? dbStatus.tablesReady !== false
+                    ? 'MySQL Aktif & Terhubung (Tabel VenueSetting Siap)'
+                    : 'MySQL Terhubung, Namun Tabel Belum Di-push'
                   : 'Mode Berkas Lokal (database.json) Aktif'}
               </span>
             </div>
@@ -1297,6 +1368,29 @@ function OwnerSettingsForm({
           <div className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded bg-white/80 border border-current self-start sm:self-auto shrink-0">
             driver: mysql2 | orm: prisma
           </div>
+        </div>
+
+        {/* Manual Sync Button to push settings to MySQL */}
+        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="space-y-0.5">
+            <div className="text-xs font-bold text-slate-800">
+              Sinkronkan Pengaturan ke Tabel VenueSetting di MySQL
+            </div>
+            <div className="text-[11px] text-slate-500">
+              Kirim dan perbarui data nama venue, WhatsApp pengelola, jam operasional, dan tarif langsung ke database MySQL sekarang.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btn-sync-settings-mysql"
+            disabled={syncingDb}
+            onClick={handleManualSyncDb}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-50 shrink-0 min-h-[36px]"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${syncingDb ? 'animate-spin' : ''}`} />
+            <span>{syncingDb ? 'Menyinkronkan...' : 'Sinkronkan ke MySQL Sekarang'}</span>
+          </button>
         </div>
 
         {/* Quick Instructions for Push & Vercel */}
@@ -1331,7 +1425,19 @@ function OwnerSettingsForm({
       </div>
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+        <div className="text-[11px] text-slate-500 font-medium">
+          {dbStatus?.connected ? (
+            <span className="text-emerald-700 font-semibold flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5 inline" /> MySQL Terhubung &mdash; perubahan akan langsung tersimpan di database.
+            </span>
+          ) : (
+            <span className="text-slate-500 flex items-center gap-1">
+              <Info className="w-3.5 h-3.5 inline text-amber-500" /> Mode Berkas Lokal aktif &mdash; data tersimpan di server.
+            </span>
+          )}
+        </div>
+
         <button
           type="submit"
           disabled={saving}

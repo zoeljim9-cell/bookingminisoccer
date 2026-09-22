@@ -33,11 +33,12 @@ export function getPrismaClient(): PrismaClient | null {
   }
 }
 
-export async function testMySqlConnection(): Promise<{ connected: boolean; message: string }> {
+export async function testMySqlConnection(): Promise<{ connected: boolean; tablesReady?: boolean; message: string }> {
   const client = getPrismaClient();
   if (!client) {
     return {
       connected: false,
+      tablesReady: false,
       message: 'DATABASE_URL belum dikonfigurasi di file environment (.env). Aplikasi menggunakan penyimpanan file lokal yang persisten.',
     };
   }
@@ -45,11 +46,42 @@ export async function testMySqlConnection(): Promise<{ connected: boolean; messa
   try {
     await client.$queryRawUnsafe('SELECT 1');
     isConnected = true;
-    return { connected: true, message: 'Terhubung ke database MySQL via Prisma.' };
+
+    // Verify whether all tables (VenueSetting, Booking, FieldClosure) exist and are readable
+    try {
+      await Promise.all([
+        client.venueSetting.findFirst(),
+        client.booking.findFirst(),
+        client.fieldClosure.findFirst(),
+      ]);
+      return {
+        connected: true,
+        tablesReady: true,
+        message: 'Terhubung ke database MySQL via Prisma & semua tabel (VenueSetting, Booking, FieldClosure) siap digunakan.',
+      };
+    } catch (tableErr: any) {
+      if (
+        tableErr.message?.toLowerCase().includes("doesn't exist") ||
+        tableErr.message?.toLowerCase().includes('table') ||
+        tableErr.message?.includes('P2021')
+      ) {
+        return {
+          connected: true,
+          tablesReady: false,
+          message: 'Terhubung ke MySQL, tetapi beberapa tabel belum dibuat di database. Harap jalankan: npx prisma db push',
+        };
+      }
+      return {
+        connected: true,
+        tablesReady: true,
+        message: 'Terhubung ke database MySQL via Prisma.',
+      };
+    }
   } catch (err: any) {
     isConnected = false;
     return {
       connected: false,
+      tablesReady: false,
       message: `Gagal terhubung ke MySQL: ${err.message || 'Koneksi ditolak'}. Fallback ke penyimpanan lokal aktif.`,
     };
   }
@@ -69,15 +101,21 @@ export function mapDbToSettings(dbSetting: any, fallback: VenueSettings): VenueS
       ownerWhatsapp: dbSetting.ownerWhatsapp || fallback.ownerWhatsapp,
       openTime: dbSetting.openTime || fallback.openTime,
       closeTime: dbSetting.closeTime || fallback.closeTime,
-      closedDays: dbSetting.closedDays ? JSON.parse(dbSetting.closedDays) : fallback.closedDays,
-      maxAdvanceDays: dbSetting.maxAdvanceDays ?? fallback.maxAdvanceDays,
-      minDurationMinutes: dbSetting.minDurationMinutes ?? fallback.minDurationMinutes,
-      allowedDurations: dbSetting.allowedDurations ? JSON.parse(dbSetting.allowedDurations) : fallback.allowedDurations,
-      bufferMinutes: dbSetting.bufferMinutes ?? fallback.bufferMinutes,
-      baseHourlyRate: dbSetting.baseHourlyRate ?? fallback.baseHourlyRate,
-      specialRates: dbSetting.specialRates ? JSON.parse(dbSetting.specialRates) : fallback.specialRates,
-      paymentTerms: dbSetting.paymentTerms || fallback.paymentTerms,
-      cancellationPolicy: dbSetting.cancellationPolicy || fallback.cancellationPolicy,
+      closedDays: dbSetting.closedDays
+        ? (typeof dbSetting.closedDays === 'string' ? JSON.parse(dbSetting.closedDays) : dbSetting.closedDays)
+        : fallback.closedDays,
+      maxAdvanceDays: typeof dbSetting.maxAdvanceDays === 'number' ? dbSetting.maxAdvanceDays : (Number(dbSetting.maxAdvanceDays) || fallback.maxAdvanceDays),
+      minDurationMinutes: typeof dbSetting.minDurationMinutes === 'number' ? dbSetting.minDurationMinutes : (Number(dbSetting.minDurationMinutes) || fallback.minDurationMinutes),
+      allowedDurations: dbSetting.allowedDurations
+        ? (typeof dbSetting.allowedDurations === 'string' ? JSON.parse(dbSetting.allowedDurations) : dbSetting.allowedDurations)
+        : fallback.allowedDurations,
+      bufferMinutes: typeof dbSetting.bufferMinutes === 'number' ? dbSetting.bufferMinutes : (Number(dbSetting.bufferMinutes) || fallback.bufferMinutes),
+      baseHourlyRate: typeof dbSetting.baseHourlyRate === 'number' ? dbSetting.baseHourlyRate : (Number(dbSetting.baseHourlyRate) || fallback.baseHourlyRate),
+      specialRates: dbSetting.specialRates
+        ? (typeof dbSetting.specialRates === 'string' ? JSON.parse(dbSetting.specialRates) : dbSetting.specialRates)
+        : fallback.specialRates,
+      paymentTerms: dbSetting.paymentTerms ?? fallback.paymentTerms,
+      cancellationPolicy: dbSetting.cancellationPolicy ?? fallback.cancellationPolicy,
     };
   } catch (e) {
     console.error('[Prisma] Error parsing DB settings JSON:', e);
@@ -85,24 +123,46 @@ export function mapDbToSettings(dbSetting: any, fallback: VenueSettings): VenueS
   }
 }
 
-// Convert VenueSettings to DB payload
+// Convert VenueSettings to DB payload with strict type coercion for MySQL Prisma schema
 export function mapSettingsToDb(settings: VenueSettings) {
+  let closedDaysStr = '[]';
+  if (Array.isArray(settings.closedDays)) {
+    closedDaysStr = JSON.stringify(settings.closedDays);
+  } else if (typeof settings.closedDays === 'string') {
+    closedDaysStr = settings.closedDays;
+  }
+
+  let allowedDurationsStr = '[60,90,120,180]';
+  if (Array.isArray(settings.allowedDurations)) {
+    allowedDurationsStr = JSON.stringify(settings.allowedDurations);
+  } else if (typeof settings.allowedDurations === 'string') {
+    allowedDurationsStr = settings.allowedDurations;
+  }
+
+  let specialRatesStr = '[]';
+  if (Array.isArray(settings.specialRates)) {
+    specialRatesStr = JSON.stringify(settings.specialRates);
+  } else if (typeof settings.specialRates === 'string') {
+    specialRatesStr = settings.specialRates;
+  }
+
   return {
-    name: settings.name,
-    address: settings.address,
-    gmapsUrl: settings.gmapsUrl,
-    ownerWhatsapp: settings.ownerWhatsapp,
-    openTime: settings.openTime,
-    closeTime: settings.closeTime,
-    closedDays: JSON.stringify(settings.closedDays || []),
-    maxAdvanceDays: settings.maxAdvanceDays,
-    minDurationMinutes: settings.minDurationMinutes,
-    allowedDurations: JSON.stringify(settings.allowedDurations || [60, 90, 120, 180]),
-    bufferMinutes: settings.bufferMinutes,
-    baseHourlyRate: settings.baseHourlyRate,
-    specialRates: JSON.stringify(settings.specialRates || []),
-    paymentTerms: settings.paymentTerms || '',
-    cancellationPolicy: settings.cancellationPolicy || '',
+    name: String(settings.name || 'MiniSoccer Arena'),
+    address: String(settings.address || ''),
+    gmapsUrl: String(settings.gmapsUrl || ''),
+    ownerWhatsapp: String(settings.ownerWhatsapp || ''),
+    ownerPin: '1234',
+    openTime: String(settings.openTime || '07:00'),
+    closeTime: String(settings.closeTime || '23:00'),
+    closedDays: closedDaysStr,
+    maxAdvanceDays: Math.round(Number(settings.maxAdvanceDays)) || 30,
+    minDurationMinutes: Math.round(Number(settings.minDurationMinutes)) || 60,
+    allowedDurations: allowedDurationsStr,
+    bufferMinutes: Math.round(Number(settings.bufferMinutes)) || 0,
+    baseHourlyRate: Math.round(Number(settings.baseHourlyRate)) || 300000,
+    specialRates: specialRatesStr,
+    paymentTerms: String(settings.paymentTerms || ''),
+    cancellationPolicy: String(settings.cancellationPolicy || ''),
   };
 }
 

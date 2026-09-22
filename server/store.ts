@@ -200,13 +200,21 @@ class Store {
     if (!prisma) return;
     try {
       // 1. Sync settings - MySQL is Source of Truth
-      const dbSetting = await prisma.venueSetting.findUnique({ where: { id: 'default' } });
-      if (dbSetting) {
-        this.data.settings = mapDbToSettings(dbSetting, this.data.settings);
-      } else {
-        await prisma.venueSetting.create({
-          data: { id: 'default', ...mapSettingsToDb(this.data.settings) },
+      const existingSetting = await prisma.venueSetting.findFirst();
+      if (existingSetting) {
+        this.data.settings = mapDbToSettings(existingSetting, this.data.settings);
+        console.log('[Prisma] Pengaturan venue disinkronkan dari MySQL:', {
+          id: existingSetting.id,
+          name: this.data.settings.name,
         });
+      } else {
+        const payload = mapSettingsToDb(this.data.settings);
+        await prisma.venueSetting.upsert({
+          where: { id: 'default' },
+          create: { id: 'default', ...payload },
+          update: payload,
+        });
+        console.log('[Prisma] Pengaturan venue default berhasil diinisialisasi ke MySQL.');
       }
 
       // 2. Sync bookings - MySQL is primary Source of Truth
@@ -347,7 +355,7 @@ class Store {
     return { ...this.data.settings };
   }
 
-  public updateSettings(newSettings: Partial<VenueSettings>): VenueSettings {
+  public async updateSettings(newSettings: Partial<VenueSettings>): Promise<{ settings: VenueSettings; mysqlSynced: boolean; mysqlError?: string }> {
     const sanitized = { ...newSettings };
     if (sanitized.ownerWhatsapp) {
       sanitized.ownerWhatsapp = normalizeWhatsappNumber(sanitized.ownerWhatsapp) || sanitized.ownerWhatsapp.trim();
@@ -355,17 +363,67 @@ class Store {
     this.data.settings = { ...this.data.settings, ...sanitized };
     this.saveToDisk(this.data);
 
+    let mysqlSynced = false;
+    let mysqlError: string | undefined;
+
     const prisma = getPrismaClient();
     if (prisma) {
-      prisma.venueSetting
-        .upsert({
-          where: { id: 'default' },
-          create: { id: 'default', ...mapSettingsToDb(this.data.settings) },
-          update: mapSettingsToDb(this.data.settings),
-        })
-        .catch((e) => console.warn('[Prisma] Gagal update VenueSetting di MySQL:', e.message));
+      try {
+        const payload = mapSettingsToDb(this.data.settings);
+        const existing = await prisma.venueSetting.findFirst();
+        const targetId = existing?.id || 'default';
+        await prisma.venueSetting.upsert({
+          where: { id: targetId },
+          create: { id: targetId, ...payload },
+          update: payload,
+        });
+        mysqlSynced = true;
+        console.log('[Prisma] Sukses memperbarui pengaturan VenueSetting di database MySQL:', payload.name);
+      } catch (e: any) {
+        mysqlError = e.message || 'Gagal update di MySQL';
+        console.error('[Prisma] Gagal update VenueSetting di MySQL:', e.message);
+      }
     }
-    return this.getSettings();
+
+    return {
+      settings: this.getSettings(),
+      mysqlSynced,
+      mysqlError,
+    };
+  }
+
+  public async syncSettingsToMySql(): Promise<{ success: boolean; message: string; settings: VenueSettings }> {
+    const prisma = getPrismaClient();
+    if (!prisma) {
+      return {
+        success: false,
+        message: 'DATABASE_URL belum dikonfigurasi di file environment (.env).',
+        settings: this.getSettings(),
+      };
+    }
+
+    try {
+      const payload = mapSettingsToDb(this.data.settings);
+      const existing = await prisma.venueSetting.findFirst();
+      const targetId = existing?.id || 'default';
+      await prisma.venueSetting.upsert({
+        where: { id: targetId },
+        create: { id: targetId, ...payload },
+        update: payload,
+      });
+      return {
+        success: true,
+        message: 'Pengaturan berhasil disinkronkan ke database MySQL via Prisma.',
+        settings: this.getSettings(),
+      };
+    } catch (err: any) {
+      console.error('[Prisma] Sync settings manual gagal:', err);
+      return {
+        success: false,
+        message: `Gagal sinkronisasi ke MySQL: ${err.message || 'Kesalahan database'}`,
+        settings: this.getSettings(),
+      };
+    }
   }
 
   public getAllBookings(): Booking[] {
@@ -587,10 +645,10 @@ class Store {
     });
   }
 
-  public updateBookingDetails(
+  public async updateBookingDetails(
     id: string,
     updates: { customerName?: string; customerWhatsapp?: string; teamName?: string; notes?: string }
-  ): Booking {
+  ): Promise<Booking> {
     const booking = this.findBookingById(id);
     if (!booking) throw new Error('Booking tidak ditemukan.');
 
@@ -604,8 +662,8 @@ class Store {
 
     const prisma = getPrismaClient();
     if (prisma) {
-      prisma.booking
-        .updateMany({
+      try {
+        await prisma.booking.updateMany({
           where: { id },
           data: {
             customerName: booking.customerName,
@@ -614,14 +672,16 @@ class Store {
             notes: booking.notes || null,
             updatedAt: new Date(booking.updatedAt),
           },
-        })
-        .catch((e) => console.warn('[Prisma] Gagal update detail kontak di MySQL:', e.message));
+        });
+      } catch (e: any) {
+        console.warn('[Prisma] Gagal update detail kontak di MySQL:', e.message);
+      }
     }
 
     return booking;
   }
 
-  public updatePaymentStatus(id: string, status: 'paid' | 'unpaid'): Booking {
+  public async updatePaymentStatus(id: string, status: 'paid' | 'unpaid'): Promise<Booking> {
     const booking = this.findBookingById(id);
     if (!booking) throw new Error('Booking tidak ditemukan.');
     booking.paymentStatus = status;
@@ -630,18 +690,20 @@ class Store {
 
     const prisma = getPrismaClient();
     if (prisma) {
-      prisma.booking
-        .updateMany({
+      try {
+        await prisma.booking.updateMany({
           where: { id },
-          data: { paymentStatus: status },
-        })
-        .catch((e) => console.warn('[Prisma] Gagal update payment status di MySQL:', e.message));
+          data: { paymentStatus: status, updatedAt: new Date(booking.updatedAt) },
+        });
+      } catch (e: any) {
+        console.warn('[Prisma] Gagal update payment status di MySQL:', e.message);
+      }
     }
 
     return booking;
   }
 
-  public cancelBooking(id: string, reason?: string): Booking {
+  public async cancelBooking(id: string, reason?: string): Promise<Booking> {
     const booking = this.findBookingById(id);
     if (!booking) throw new Error('Booking tidak ditemukan.');
     booking.bookingStatus = 'cancelled';
@@ -651,21 +713,24 @@ class Store {
 
     const prisma = getPrismaClient();
     if (prisma) {
-      prisma.booking
-        .updateMany({
+      try {
+        await prisma.booking.updateMany({
           where: { id },
           data: {
             bookingStatus: 'cancelled',
             cancellationReason: booking.cancellationReason,
+            updatedAt: new Date(booking.updatedAt),
           },
-        })
-        .catch((e) => console.warn('[Prisma] Gagal update cancel booking di MySQL:', e.message));
+        });
+      } catch (e: any) {
+        console.warn('[Prisma] Gagal update cancel booking di MySQL:', e.message);
+      }
     }
 
     return booking;
   }
 
-  public addClosure(date: string, startTime: string, endTime: string, reason: string): FieldClosure {
+  public async addClosure(date: string, startTime: string, endTime: string, reason: string): Promise<FieldClosure> {
     const startMins = timeToMinutes(startTime);
     const endMins = timeToMinutes(endTime);
 
@@ -696,8 +761,8 @@ class Store {
 
     const prisma = getPrismaClient();
     if (prisma) {
-      prisma.fieldClosure
-        .create({
+      try {
+        await prisma.fieldClosure.create({
           data: {
             id: closure.id,
             date: closure.date,
@@ -706,20 +771,26 @@ class Store {
             reason: closure.reason,
             isDemo: false,
           },
-        })
-        .catch((e) => console.warn('[Prisma] Gagal menyimpan closure di MySQL:', e.message));
+        });
+      } catch (e: any) {
+        console.warn('[Prisma] Gagal menyimpan closure di MySQL:', e.message);
+      }
     }
 
     return closure;
   }
 
-  public removeClosure(id: string) {
+  public async removeClosure(id: string): Promise<void> {
     this.data.closures = this.data.closures.filter(c => c.id !== id);
     this.saveToDisk(this.data);
 
     const prisma = getPrismaClient();
     if (prisma) {
-      prisma.fieldClosure.deleteMany({ where: { id } }).catch((e) => console.warn('[Prisma] Gagal hapus closure di MySQL:', e.message));
+      try {
+        await prisma.fieldClosure.deleteMany({ where: { id } });
+      } catch (e: any) {
+        console.warn('[Prisma] Gagal hapus closure di MySQL:', e.message);
+      }
     }
   }
 
