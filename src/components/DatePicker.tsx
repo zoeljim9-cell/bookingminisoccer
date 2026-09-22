@@ -28,7 +28,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     daysList.push({
       dateStr,
       isToday: i === 0,
-      dayName: i === 0 ? 'Hari ini' : i === 1 ? 'Besok' : shortInfo.dayName,
+      dayName: i === 0 ? 'Hari Ini' : i === 1 ? 'Besok' : shortInfo.dayName,
       dateNum: shortInfo.dateNum,
       monthName: shortInfo.monthName,
     });
@@ -39,34 +39,38 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   const maxDateStr = maxDateObj.toISOString().slice(0, 10);
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-xs" id="date-picker-container">
-      <div className="flex items-center justify-between mb-2.5">
+    <div className="bg-white rounded-2xl border border-stone-200/90 p-3.5 sm:p-4 shadow-2xs" id="date-picker-container">
+      {/* Header bar of DatePicker */}
+      <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <CalendarIcon className="w-4 h-4 text-emerald-600" />
-          <span className="text-xs sm:text-sm font-semibold text-slate-800">
-            {formatIndonesianDate(selectedDate)}
-          </span>
-          {selectedDate === todayStr && (
-            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded-full">
-              Hari Ini
+          <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-800 flex items-center justify-center border border-emerald-200/60">
+            <CalendarIcon className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <span className="text-xs sm:text-sm font-bold text-stone-900 block leading-tight">
+              {formatIndonesianDate(selectedDate)}
             </span>
-          )}
+            <span className="text-[11px] text-stone-500 font-medium">
+              {selectedDate === todayStr ? 'Jadwal operasional hari ini' : 'Pilih tanggal bermain'}
+            </span>
+          </div>
         </div>
 
         <button
           type="button"
           id="btn-open-calendar-modal"
           onClick={() => setShowCalendarModal(true)}
-          className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+          className="text-xs text-emerald-800 hover:text-emerald-900 font-semibold flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/70 transition-colors cursor-pointer"
         >
+          <CalendarIcon className="w-3 h-3 text-emerald-700" />
           <span>Pilih Tanggal Lain</span>
         </button>
       </div>
 
       {/* 7-Day scrollable pill strip */}
       <div className="relative">
-        <div 
-          className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-none snap-x touch-pan-x scroll-smooth -mx-1 px-1" 
+        <div
+          className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-none snap-x touch-pan-x scroll-smooth -mx-0.5 px-0.5"
           id="seven-days-scroll"
         >
           {daysList.map((item) => {
@@ -77,19 +81,19 @@ export const DatePicker: React.FC<DatePickerProps> = ({
                 id={`day-tab-${item.dateStr}`}
                 type="button"
                 onClick={() => onSelectDate(item.dateStr)}
-                className={`flex-1 min-w-[68px] sm:min-w-[84px] py-2 px-1 rounded-xl text-center transition-all cursor-pointer snap-start border active:scale-95 ${
+                className={`flex-1 min-w-[70px] sm:min-w-[84px] py-2.5 px-1.5 rounded-xl text-center transition-all duration-150 cursor-pointer snap-start border active:scale-95 ${
                   isSelected
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-600/20'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    ? 'bg-emerald-800 text-white border-emerald-900 shadow-xs ring-2 ring-emerald-800/20'
+                    : 'bg-stone-50/80 hover:bg-stone-100 text-stone-700 border-stone-200/90'
                 }`}
               >
-                <div className={`text-[10px] sm:text-[11px] font-medium leading-tight truncate ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
+                <div className={`text-[10px] sm:text-[11px] font-medium leading-tight truncate ${isSelected ? 'text-emerald-200 font-semibold' : 'text-stone-500'}`}>
                   {item.dayName}
                 </div>
-                <div className={`text-base sm:text-lg font-bold leading-tight my-0.5 ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                <div className={`text-base sm:text-lg font-extrabold leading-tight my-0.5 ${isSelected ? 'text-white' : 'text-stone-900'}`}>
                   {item.dateNum}
                 </div>
-                <div className={`text-[9px] sm:text-[10px] font-medium uppercase tracking-wider ${isSelected ? 'text-emerald-200' : 'text-slate-400'}`}>
+                <div className={`text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider ${isSelected ? 'text-lime-300' : 'text-stone-400'}`}>
                   {item.monthName}
                 </div>
               </button>
@@ -98,29 +102,33 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         </div>
       </div>
 
-      {/* Calendar Modal for other dates up to maxAdvanceDays */}
+      {/* Calendar Modal for dates up to maxAdvanceDays */}
       {showCalendarModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-xs p-0 sm:p-4" id="calendar-modal">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-100 animate-in slide-in-from-bottom-5 sm:fade-in sm:zoom-in-95 duration-150 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-stone-900/60 backdrop-blur-xs p-0 sm:p-4" id="calendar-modal">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-sm w-full p-5 sm:p-6 shadow-2xl border border-stone-200 animate-in slide-in-from-bottom-5 sm:fade-in sm:zoom-in-95 duration-150 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-6">
             {/* Grab handle for mobile bottom sheet */}
-            <div className="sm:hidden w-10 h-1 bg-slate-300 rounded-full mx-auto mb-3" />
+            <div className="sm:hidden w-10 h-1 bg-stone-300 rounded-full mx-auto mb-3" />
 
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800 text-base">Pilih Tanggal Jadwal</h3>
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div>
+                <h3 className="font-bold text-stone-900 text-base">Pilih Tanggal Jadwal</h3>
+                <p className="text-xs text-stone-500 mt-0.5">Maksimal pemesanan {maxAdvanceDays} hari ke depan</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowCalendarModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                className="text-stone-400 hover:text-stone-600 p-1.5 rounded-lg hover:bg-stone-100 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="py-4">
-              <p className="text-xs text-slate-500 mb-3">
-                Pemesanan dibuka hingga {maxAdvanceDays} hari ke depan ({formatIndonesianDate(maxDateStr)}).
-              </p>
+              <label htmlFor="calendar-date-input" className="block text-xs font-semibold text-stone-700 mb-1.5">
+                Tentukan Tanggal Main:
+              </label>
               <input
+                id="calendar-date-input"
                 type="date"
                 min={todayStr}
                 max={maxDateStr}
@@ -131,17 +139,17 @@ export const DatePicker: React.FC<DatePickerProps> = ({
                     setShowCalendarModal(false);
                   }
                 }}
-                className="w-full text-base font-semibold border-2 border-emerald-500 rounded-xl px-4 py-3 text-slate-800 focus:outline-hidden focus:ring-3 focus:ring-emerald-500/20"
+                className="w-full text-base font-semibold border-2 border-emerald-700 rounded-xl px-4 py-3 text-stone-900 focus:outline-hidden focus:ring-3 focus:ring-emerald-700/20 bg-stone-50 cursor-pointer"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
               <button
                 type="button"
                 onClick={() => setShowCalendarModal(false)}
-                className="w-full sm:w-auto px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[44px] flex items-center justify-center"
+                className="w-full sm:w-auto px-4 py-2.5 text-xs sm:text-sm font-semibold text-stone-600 hover:bg-stone-100 rounded-xl min-h-[42px] flex items-center justify-center cursor-pointer"
               >
-                Tutup
+                Batal
               </button>
             </div>
           </div>

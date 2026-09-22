@@ -9,6 +9,8 @@ import {
   RefreshCw,
   Sparkles,
   Info,
+  Calendar,
+  X,
 } from 'lucide-react';
 import { AvailableRange, Booking, PublicScheduleResponse, VenueSettings } from './types';
 import {
@@ -23,10 +25,12 @@ import {
 } from './utils/timeUtils';
 import { fetchPrivateBooking, fetchPublicSchedule, fetchVenueInfo } from './api';
 import { Header } from './components/Header';
+import { HeroSection } from './components/HeroSection';
 import { DatePicker } from './components/DatePicker';
 import { ScheduleTimeline } from './components/ScheduleTimeline';
 import { TimeDurationPicker } from './components/TimeDurationPicker';
 import { StickySummaryBar } from './components/StickySummaryBar';
+import { DesktopBookingSummary } from './components/DesktopBookingSummary';
 import { CustomerBookingModal } from './components/CustomerBookingModal';
 import { BookingSuccessModal } from './components/BookingSuccessModal';
 import { LookupBookingModal } from './components/LookupBookingModal';
@@ -179,17 +183,24 @@ export default function App() {
       setDurationMinutes(range.durationMinutes);
     }
 
-    // Otomatis scroll ke section atur durasi dan jam
+    // Smooth scroll ke section atur durasi dan jam
     requestAnimationFrame(() => {
       const pickerEl = document.getElementById('time-duration-picker');
       if (pickerEl) {
         pickerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        pickerEl.classList.add('ring-2', 'ring-emerald-500', 'border-emerald-500');
+        pickerEl.classList.add('ring-2', 'ring-emerald-700', 'border-emerald-700');
         setTimeout(() => {
-          pickerEl.classList.remove('ring-2', 'ring-emerald-500', 'border-emerald-500');
+          pickerEl.classList.remove('ring-2', 'ring-emerald-700', 'border-emerald-700');
         }, 1200);
       }
     });
+  };
+
+  const handleScrollToBooking = () => {
+    const el = document.getElementById('booking-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   const handleUpdateContactDraft = (updates: Partial<typeof contactDraft>) => {
@@ -207,106 +218,92 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-32 sm:pb-36 pb-[max(8rem,calc(7rem+env(safe-area-inset-bottom)))] font-sans flex flex-col">
-      {/* 1. Header (Compact, Section 1: Hindari banner besar yang mendorong jadwal jauh ke bawah) */}
+    <div className="min-h-screen bg-[#f7f9f8] text-stone-900 pb-32 sm:pb-36 pb-[max(8rem,calc(7rem+env(safe-area-inset-bottom)))] font-sans flex flex-col">
+      {/* 1. Header with branding, check booking, and owner login */}
       <Header
         venue={venue}
         onOpenLookup={() => setIsLookupModalOpen(true)}
+        onScrollToBooking={handleScrollToBooking}
       />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-4 py-3 sm:py-4 space-y-3 sm:space-y-4">
-        {/* Venue Operational Notice & Location Card */}
-        {venue && (
-          <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-slate-600">
-              <span className="flex items-center gap-1 font-semibold text-slate-800">
-                <Clock className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Buka {venue.openTime} – {venue.closeTime} WIB</span>
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-slate-600 text-[11px] sm:text-xs">Rumput Sintetis FIFA</span>
-            </div>
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-4 space-y-4 sm:space-y-6">
+        {/* 2. Hero Section with Venue Aesthetics & Quick Specs */}
+        <HeroSection venue={venue} onScrollToBooking={handleScrollToBooking} />
 
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-              <a
-                href={venue.gmapsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800 hover:underline py-0.5"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                <span>Petunjuk Maps</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+        {/* 3. Main Booking Area: Two-Column Grid on Desktop, Single Column on Mobile */}
+        <div id="booking-section" className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start pt-1">
+          {/* Left Column (Primary booking steps: Date, Timeline, Duration) */}
+          <div className="lg:col-span-8 space-y-4">
+            {/* Step A: Date Picker */}
+            <DatePicker
+              selectedDate={selectedDate}
+              onSelectDate={(newDate) => setSelectedDate(newDate)}
+              maxAdvanceDays={venue?.maxAdvanceDays || 30}
+            />
 
-              <span className="text-slate-300">•</span>
+            {/* Step B: Daily Timeline & Availability Display */}
+            {loadingSchedule ? (
+              <div className="bg-white rounded-2xl border border-stone-200/90 p-10 text-center shadow-xs">
+                <RefreshCw className="w-6 h-6 text-emerald-800 animate-spin mx-auto mb-2.5" />
+                <div className="text-xs font-bold text-stone-700">Memeriksa ketersediaan lapangan...</div>
+              </div>
+            ) : scheduleError ? (
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center text-xs text-rose-900">
+                <AlertCircle className="w-6 h-6 text-rose-600 mx-auto mb-2" />
+                <div className="font-bold text-sm mb-1">Gagal Memuat Jadwal</div>
+                <div>{scheduleError}</div>
+                <button
+                  type="button"
+                  onClick={() => loadSchedule(selectedDate)}
+                  className="mt-3 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer transition-colors"
+                >
+                  Coba Lagi
+                </button>
+              </div>
+            ) : scheduleData ? (
+              <ScheduleTimeline
+                slots={scheduleData.slots}
+                freeRanges={scheduleData.freeRanges}
+                isFull={scheduleData.isFull}
+                nearestAvailableDates={scheduleData.nearestAvailableDates}
+                selectedStartTime={startTime}
+                selectedEndTime={endTime}
+                onSelectRange={handleSelectFreeRange}
+                onSelectDate={(d) => setSelectedDate(d)}
+              />
+            ) : null}
 
-              <a
-                href={`https://wa.me/${venue.ownerWhatsapp.replace(/[^0-9]/g, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800 hover:underline py-0.5"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                <span>WhatsApp Pengelola</span>
-              </a>
-            </div>
+            {/* Step C: Flexible Start Time & Duration Picker */}
+            {venue && (
+              <TimeDurationPicker
+                date={selectedDate}
+                startTime={startTime}
+                durationMinutes={durationMinutes}
+                settings={venue}
+                collisionReason={collisionState.reason}
+                onTimeChange={(newStart) => setStartTime(newStart)}
+                onDurationChange={(newDur) => setDurationMinutes(newDur)}
+              />
+            )}
           </div>
-        )}
 
-        {/* 2. Date Picker (Section 1: 7-day scrollable + calendar modal) */}
-        <DatePicker
-          selectedDate={selectedDate}
-          onSelectDate={(newDate) => setSelectedDate(newDate)}
-          maxAdvanceDays={venue?.maxAdvanceDays || 30}
-        />
-
-        {/* 3. Daily Timeline & Availability Display (Section 1) */}
-        {loadingSchedule ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-10 text-center shadow-xs">
-            <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin mx-auto mb-2" />
-            <div className="text-xs font-bold text-slate-700">Memeriksa ketersediaan lapangan...</div>
+          {/* Right Column (Desktop sticky summary card with immediate booking trigger) */}
+          <div className="hidden lg:block lg:col-span-4">
+            <DesktopBookingSummary
+              venue={venue}
+              date={selectedDate}
+              startTime={startTime}
+              durationMinutes={durationMinutes}
+              totalPrice={priceResult.totalPrice}
+              hasCollision={collisionState.hasCollision}
+              collisionReason={collisionState.reason}
+              onProceed={() => setIsBookingModalOpen(true)}
+            />
           </div>
-        ) : scheduleError ? (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-6 text-center text-xs text-rose-800">
-            <AlertCircle className="w-6 h-6 text-rose-600 mx-auto mb-2" />
-            <div className="font-bold text-sm mb-1">Gagal Memuat Jadwal</div>
-            <div>{scheduleError}</div>
-            <button
-              onClick={() => loadSchedule(selectedDate)}
-              className="mt-3 px-4 py-1.5 bg-rose-600 text-white rounded-lg font-bold"
-            >
-              Coba Lagi
-            </button>
-          </div>
-        ) : scheduleData ? (
-          <ScheduleTimeline
-            slots={scheduleData.slots}
-            freeRanges={scheduleData.freeRanges}
-            isFull={scheduleData.isFull}
-            nearestAvailableDates={scheduleData.nearestAvailableDates}
-            selectedStartTime={startTime}
-            selectedEndTime={endTime}
-            onSelectRange={handleSelectFreeRange}
-            onSelectDate={(d) => setSelectedDate(d)}
-          />
-        ) : null}
-
-        {/* 4. Flexible Start Time & Duration Picker (Section 2 & Section 4) */}
-        {venue && (
-          <TimeDurationPicker
-            date={selectedDate}
-            startTime={startTime}
-            durationMinutes={durationMinutes}
-            settings={venue}
-            collisionReason={collisionState.reason}
-            onTimeChange={(newStart) => setStartTime(newStart)}
-            onDurationChange={(newDur) => setDurationMinutes(newDur)}
-          />
-        )}
+        </div>
       </main>
 
-      {/* 5. Mobile Sticky Summary Bar (Section 3: 14:45–16:15 · 1 jam 30 menit · Rp450.000) */}
+      {/* 4. Mobile Sticky Summary Bar */}
       <StickySummaryBar
         startTime={startTime}
         durationMinutes={durationMinutes}
@@ -315,7 +312,7 @@ export default function App() {
         onProceed={() => setIsBookingModalOpen(true)}
       />
 
-      {/* 6. Customer 3-Step Booking Wizard Modal (Section 3 & Section 4) */}
+      {/* 5. Customer 3-Step Booking Wizard Modal */}
       {venue && (
         <CustomerBookingModal
           isOpen={isBookingModalOpen}
@@ -335,7 +332,7 @@ export default function App() {
         />
       )}
 
-      {/* 7. Booking Success Screen (Section 5) */}
+      {/* 6. Booking Success Screen */}
       {successBookingData && venue && (
         <BookingSuccessModal
           booking={successBookingData.booking}
@@ -345,7 +342,7 @@ export default function App() {
         />
       )}
 
-      {/* 8. Cek Booking Modal (Section 5 & Section 10) */}
+      {/* 7. Cek Booking Modal */}
       {venue && (
         <LookupBookingModal
           isOpen={isLookupModalOpen}
@@ -354,22 +351,22 @@ export default function App() {
         />
       )}
 
-      {/* 9. Private Booking Viewer Modal (When opened with ?token=...) */}
+      {/* 8. Private Booking Viewer Modal (When opened with ?token=...) */}
       {privateViewingBooking && venue && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base">Detail Booking Privat</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <h3 className="font-extrabold text-stone-900 text-base">Detail Booking Privat</h3>
               <button
                 type="button"
                 onClick={() => setPrivateViewingBooking(null)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="py-4 space-y-2 text-xs text-slate-700">
-              <div className="text-sm font-black text-slate-900">
+            <div className="py-4 space-y-2 text-xs text-stone-700">
+              <div className="text-sm font-black text-stone-900">
                 Kode: {privateViewingBooking.bookingCode}
               </div>
               <div>Tanggal: {formatIndonesianDate(privateViewingBooking.date)}</div>
@@ -382,8 +379,9 @@ export default function App() {
               <div>Status: {privateViewingBooking.bookingStatus}</div>
             </div>
             <button
+              type="button"
               onClick={() => setPrivateViewingBooking(null)}
-              className="w-full py-2 bg-emerald-600 text-white font-bold rounded-xl text-xs"
+              className="w-full py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold rounded-xl text-xs cursor-pointer transition-colors"
             >
               Tutup
             </button>

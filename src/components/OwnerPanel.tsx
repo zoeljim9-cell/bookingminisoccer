@@ -194,8 +194,8 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
                 <span className="hidden xs:inline">Ke Booking</span>
               </button>
             )}
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-sm">
-              👑
+            <div className="w-8 h-8 rounded-lg bg-emerald-800 text-lime-400 flex items-center justify-center font-black text-sm">
+              <Shield className="w-4 h-4" />
             </div>
             <div>
               <h1 className="text-base font-black tracking-tight flex items-center gap-2 leading-tight">
