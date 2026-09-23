@@ -247,9 +247,9 @@ export const DEFAULT_MEMBERS: Member[] = [
 ];
 
 export const DEFAULT_SETTINGS: VenueSettings = {
-  name: 'FalseNine Mini Soccer',
+  name: 'Almansuri Arena',
   address: 'Jl. Lapangan Hijau No. 9, Jakarta',
-  gmapsUrl: 'https://maps.google.com/?q=FalseNine+Mini+Soccer',
+  gmapsUrl: 'https://maps.google.com/?q=Almansuri+Arena',
   ownerWhatsapp: '0822-7607-9061',
   openTime: '07:00',
   closeTime: '02:00',
@@ -408,35 +408,33 @@ class Store {
     const prisma = getPrismaClient();
     if (!prisma) return;
     try {
-      // 1. Sync settings - Upgrade older settings or missing slotSessions to FalseNine flyer slots
+      // 1. Sync settings
       const existingSetting = await prisma.venueSetting.findFirst();
       if (existingSetting) {
-        const hasSlotSessions = existingSetting.slotSessions && existingSetting.slotSessions !== '[]';
-        const isOldMiniSoccer = existingSetting.name === 'MiniSoccer Arena';
-        if (!hasSlotSessions || isOldMiniSoccer) {
-          this.data.settings = {
-            ...this.data.settings,
-            ...mapDbToSettings(existingSetting, this.data.settings),
-            name: 'FalseNine Mini Soccer',
-            ownerWhatsapp: '0822-7607-9061',
-            openTime: '07:00',
-            closeTime: '02:00',
-            baseHourlyRate: 350000,
-            slotSessions: DEFAULT_FALSENINE_SLOTS,
-          };
-          const payload = mapSettingsToDb(this.data.settings);
-          await prisma.venueSetting.update({
-            where: { id: existingSetting.id },
-            data: payload,
-          });
-          console.log('[Prisma] Venue setting diperbarui dengan Pricelist FalseNine resmi di MySQL.');
-        } else {
-          this.data.settings = mapDbToSettings(existingSetting, this.data.settings);
-          console.log('[Prisma] Pengaturan venue disinkronkan dari MySQL:', {
-            id: existingSetting.id,
-            name: this.data.settings.name,
-          });
+        const loadedSettings = mapDbToSettings(existingSetting, this.data.settings);
+        // Preserve customized name or use Almansuri Arena
+        let venueName = loadedSettings.name;
+        if (!venueName || venueName === 'MiniSoccer Arena' || venueName === 'FalseNine Mini Soccer') {
+          venueName = this.data.settings.name || 'Almansuri Arena';
         }
+
+        const hasSlotSessions = loadedSettings.slotSessions && loadedSettings.slotSessions.length > 0;
+        this.data.settings = {
+          ...this.data.settings,
+          ...loadedSettings,
+          name: venueName,
+          slotSessions: hasSlotSessions ? loadedSettings.slotSessions : (this.data.settings.slotSessions || DEFAULT_FALSENINE_SLOTS),
+        };
+
+        const payload = mapSettingsToDb(this.data.settings);
+        await prisma.venueSetting.update({
+          where: { id: existingSetting.id },
+          data: payload,
+        });
+        console.log('[Prisma] Pengaturan venue disinkronkan dari MySQL:', {
+          id: existingSetting.id,
+          name: this.data.settings.name,
+        });
       } else {
         const payload = mapSettingsToDb(this.data.settings);
         await prisma.venueSetting.upsert({
@@ -444,7 +442,7 @@ class Store {
           create: { id: 'default', ...payload },
           update: payload,
         });
-        console.log('[Prisma] Pengaturan venue FalseNine berhasil diinisialisasi ke MySQL.');
+        console.log('[Prisma] Pengaturan venue Almansuri Arena berhasil diinisialisasi ke MySQL.');
       }
 
       // 2. Sync bookings - MySQL is primary Source of Truth

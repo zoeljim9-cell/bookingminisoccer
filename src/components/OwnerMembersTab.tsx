@@ -227,13 +227,13 @@ export const OwnerMembersTab: React.FC<OwnerMembersTabProps> = ({ token, showNot
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                FalseNine Community
+                Almansuri Community
               </span>
               <span className="text-xs text-stone-300 font-medium">Sistem Keanggotaan</span>
             </div>
             <h3 className="text-lg sm:text-xl font-black text-white mt-1 flex items-center gap-2">
               <Award className="w-5 h-5 text-amber-400" />
-              <span>Sistem Member & Komunitas FalseNine</span>
+              <span>Sistem Member & Komunitas</span>
             </h3>
             <p className="text-xs text-stone-300 mt-1 max-w-2xl">
               Kelola daftar anggota tim langganan dan komunitas mini soccer. Member yang terdaftar dapat memasukkan Kode Member saat booking untuk mendapatkan diskon resmi.
@@ -339,7 +339,7 @@ export const OwnerMembersTab: React.FC<OwnerMembersTabProps> = ({ token, showNot
         {loading ? (
           <div className="p-12 text-center text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-emerald-700" />
-            <div className="text-xs font-bold">Memuat data member FalseNine...</div>
+            <div className="text-xs font-bold">Memuat data member...</div>
           </div>
         ) : filteredMembers.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
@@ -376,7 +376,7 @@ export const OwnerMembersTab: React.FC<OwnerMembersTabProps> = ({ token, showNot
                   const cleanWa = normalizeWhatsappNumber(member.whatsapp);
                   const waUrl = `https://wa.me/${cleanWa}?text=Halo%20${encodeURIComponent(
                     member.name
-                  )},%20terima%20kasih%20telah%20menjadi%20member%20FalseNine%20Mini%20Soccer!`;
+                  )},%20terima%20kasih%20telah%20menjadi%20member%20Almansuri%20Arena!`;
 
                   return (
                     <tr

@@ -1,45 +1,199 @@
 {
   "settings": {
-    "name": "MiniSoccer Arena",
-    "address": "Jl. Lapangan Hijau No. 18, Jakarta Selatan",
-    "gmapsUrl": "https://maps.google.com/?q=Jakarta",
-    "ownerWhatsapp": "6281271386101",
+    "name": "Almansuri Arena",
+    "address": "Jl. Lapangan Hijau No. 9, Jakarta",
+    "gmapsUrl": "https://maps.google.com/?q=FalseNine+Mini+Soccer",
+    "ownerWhatsapp": "6282276079061",
     "openTime": "07:00",
-    "closeTime": "23:00",
+    "closeTime": "02:00",
     "closedDays": [],
     "maxAdvanceDays": 30,
     "minDurationMinutes": 60,
     "allowedDurations": [
       60,
       90,
-      120,
-      180
+      120
     ],
     "bufferMinutes": 0,
-    "baseHourlyRate": 300000,
-    "specialRates": [
+    "baseHourlyRate": 350000,
+    "specialRates": [],
+    "paymentTerms": "Pembayaran DP / Lunas dilakukan sebelum kick-off via Transfer Bank atau QRIS.",
+    "cancellationPolicy": "Pembatalan bebas biaya dapat dilakukan maksimal 6 jam sebelum jadwal kick-off.",
+    "slotSessions": [
       {
-        "id": "rule-peak-night",
-        "name": "Tarif Malam (Peak Hour)",
-        "hourlyRate": 350000,
-        "days": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
-        "startTime": "18:00",
-        "endTime": "23:00",
+        "id": "fn-slot-1",
+        "startTime": "07:00",
+        "endTime": "08:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 350000,
+        "weekendPrice": 465000,
+        "label": "Pagi 1",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-2",
+        "startTime": "08:00",
+        "endTime": "09:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 350000,
+        "weekendPrice": 465000,
+        "label": "Pagi 2",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-3",
+        "startTime": "09:00",
+        "endTime": "10:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 350000,
+        "weekendPrice": 465000,
+        "label": "Pagi 3",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-4",
+        "startTime": "10:00",
+        "endTime": "11:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 300000,
+        "weekendPrice": 365000,
+        "label": "Siang 1",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-5",
+        "startTime": "11:00",
+        "endTime": "12:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 300000,
+        "weekendPrice": 365000,
+        "label": "Siang 2",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-6",
+        "startTime": "12:00",
+        "endTime": "13:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 300000,
+        "weekendPrice": 365000,
+        "label": "Siang 3",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-7",
+        "startTime": "13:00",
+        "endTime": "14:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 300000,
+        "weekendPrice": 365000,
+        "label": "Siang 4",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-8",
+        "startTime": "14:00",
+        "endTime": "15:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 300000,
+        "weekendPrice": 365000,
+        "label": "Sore 1",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-9",
+        "startTime": "15:00",
+        "endTime": "16:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 365000,
+        "weekendPrice": 365000,
+        "label": "Sore 2",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-10",
+        "startTime": "16:00",
+        "endTime": "17:00",
+        "durationMinutes": 60,
+        "weekdayPrice": 435000,
+        "weekendPrice": 465000,
+        "label": "Sore 3",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-11",
+        "startTime": "17:00",
+        "endTime": "18:30",
+        "durationMinutes": 90,
+        "weekdayPrice": 525000,
+        "weekendPrice": 565000,
+        "label": "Senja (1.5 Jam)",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-12",
+        "startTime": "20:00",
+        "endTime": "22:00",
+        "durationMinutes": 120,
+        "weekdayPrice": 950000,
+        "weekendPrice": 990000,
+        "label": "Prime Night 1 (2 Jam)",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-13",
+        "startTime": "22:00",
+        "endTime": "00:00",
+        "durationMinutes": 120,
+        "weekdayPrice": 950000,
+        "weekendPrice": 990000,
+        "label": "Prime Night 2 (2 Jam)",
+        "isActive": true
+      },
+      {
+        "id": "fn-slot-14",
+        "startTime": "00:00",
+        "endTime": "02:00",
+        "durationMinutes": 120,
+        "weekdayPrice": 800000,
+        "weekendPrice": 950000,
+        "label": "Midnight Session (2 Jam)",
         "isActive": true
       }
-    ],
-    "paymentTerms": "Pembayaran dilakukan di lokasi sebelum kick-off via Cash atau QRIS.",
-    "cancellationPolicy": "Pembatalan bebas biaya dapat dilakukan maksimal 6 jam sebelum waktu main."
+    ]
   },
   "bookings": [
+    {
+      "id": "ec99bb19-6c3d-47dd-94c0-328b09eda9fd",
+      "bookingCode": "FN-260924-1285",
+      "secretToken": "c9fafbd2-5f49-4670-a043-46e5e0d1b87f",
+      "date": "2026-09-24",
+      "startTime": "14:00",
+      "endTime": "15:00",
+      "durationMinutes": 60,
+      "customerName": "Zoelfatah",
+      "customerWhatsapp": "0812713816101",
+      "bookingSource": "online",
+      "bookingStatus": "confirmed",
+      "paymentStatus": "unpaid",
+      "priceBreakdown": [
+        {
+          "fromTime": "14:00",
+          "toTime": "15:00",
+          "durationMinutes": 60,
+          "hourlyRate": 300000,
+          "amount": 300000,
+          "rateName": "Sore 1 (Weekdays)"
+        }
+      ],
+      "totalPrice": 550000,
+      "discountAmount": 0,
+      "photographerAddon": "1jam",
+      "idempotencyKey": "idem-1790152488864-kmg4nre",
+      "isDemo": false,
+      "createdAt": "2026-09-23T08:34:49.193Z",
+      "updatedAt": "2026-09-23T08:34:49.193Z"
+    },
     {
       "id": "e61e01aa-78c1-41fc-bae9-598bd6da967c",
       "bookingCode": "MS-260922-1CE9",
@@ -50,11 +204,9 @@
       "durationMinutes": 60,
       "customerName": "zulfatah",
       "customerWhatsapp": "081271386105",
-      "teamName": "",
-      "notes": "",
       "bookingSource": "online",
       "bookingStatus": "confirmed",
-      "paymentStatus": "unpaid",
+      "paymentStatus": "paid",
       "priceBreakdown": [
         {
           "fromTime": "20:57",
@@ -66,10 +218,66 @@
         }
       ],
       "totalPrice": 350000,
-      "createdAt": "2026-09-22T10:59:36.847Z",
-      "updatedAt": "2026-09-22T10:59:36.847Z",
-      "idempotencyKey": "idem-1790074776766-cwhcut0"
+      "discountAmount": 0,
+      "idempotencyKey": "idem-1790074776766-cwhcut0",
+      "isDemo": false,
+      "createdAt": "2026-09-22T10:59:36.850Z",
+      "updatedAt": "2026-09-23T07:20:47.109Z"
     }
   ],
-  "closures": []
+  "closures": [
+    {
+      "id": "5007f93e-1f93-429f-95d7-436995b077a6",
+      "date": "2026-09-23",
+      "startTime": "08:00",
+      "endTime": "11:00",
+      "reason": "Perawatan Rumput Berkala",
+      "isDemo": false,
+      "createdAt": "2026-09-23T07:17:27.996Z"
+    }
+  ],
+  "members": [
+    {
+      "id": "mem-f9-003",
+      "memberCode": "FN-MBR-003",
+      "name": "FalseNine Academy",
+      "whatsapp": "082276079061",
+      "teamName": "F9 Youngsters",
+      "tier": "Gold",
+      "discountPercentage": 15,
+      "status": "active",
+      "notes": "Akademi binaan internal FalseNine",
+      "totalBookings": 20,
+      "createdAt": "2026-09-23T03:20:15.160Z",
+      "updatedAt": "2026-09-23T03:20:15.160Z"
+    },
+    {
+      "id": "mem-f9-002",
+      "memberCode": "FN-MBR-002",
+      "name": "Komunitas MiniSoccer Batavia",
+      "whatsapp": "085712345678",
+      "teamName": "Batavia Squad",
+      "tier": "Komunitas",
+      "discountPercentage": 10,
+      "status": "active",
+      "notes": "Komunitas rutin akhir pekan",
+      "totalBookings": 12,
+      "createdAt": "2026-09-23T03:20:15.051Z",
+      "updatedAt": "2026-09-23T03:20:15.051Z"
+    },
+    {
+      "id": "mem-f9-001",
+      "memberCode": "FN-MBR-001",
+      "name": "Garuda Muda FC",
+      "whatsapp": "081234567890",
+      "teamName": "Garuda Muda FC",
+      "tier": "VIP",
+      "discountPercentage": 10,
+      "status": "active",
+      "notes": "Member aktif rutin main tiap Selasa & Jumat malam",
+      "totalBookings": 8,
+      "createdAt": "2026-09-23T03:20:14.983Z",
+      "updatedAt": "2026-09-23T03:20:14.983Z"
+    }
+  ]
 }

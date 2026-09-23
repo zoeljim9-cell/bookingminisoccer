@@ -218,7 +218,7 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
                 </span>
               </h1>
               <div className="text-xs text-slate-400">
-                {settings?.name || 'MiniSoccer Arena'} • Zona Waktu Asia/Jakarta (WIB)
+                {settings?.name || 'Almansuri Arena'} • Zona Waktu Asia/Jakarta (WIB)
               </div>
             </div>
           </div>
@@ -660,7 +660,7 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
                           {/* WhatsApp Customer */}
                           <a
                             href={`https://wa.me/${b.customerWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                              `Halo Kak ${b.customerName}, kami dari pengelola ${settings?.name || 'MiniSoccer Arena'} terkait booking ${b.bookingCode} jadwal ${b.date} pukul ${b.startTime} WIB.`
+                              `Halo Kak ${b.customerName}, kami dari pengelola ${settings?.name || 'Almansuri Arena'} terkait booking ${b.bookingCode} jadwal ${b.date} pukul ${b.startTime} WIB.`
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"

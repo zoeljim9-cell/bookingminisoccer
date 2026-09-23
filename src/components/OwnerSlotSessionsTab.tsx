@@ -144,7 +144,7 @@ export const OwnerSlotSessionsTab: React.FC<OwnerSlotSessionsTabProps> = ({
   };
 
   const handleResetToStandard = async () => {
-    if (!window.confirm('Reset semua jadwal sesi ke standar brosur FalseNine resmi?')) {
+    if (!window.confirm('Reset semua jadwal sesi ke standar brosur Almansuri Arena resmi?')) {
       return;
     }
 
@@ -155,7 +155,7 @@ export const OwnerSlotSessionsTab: React.FC<OwnerSlotSessionsTabProps> = ({
       onSessionsUpdated(res.slotSessions);
       setIsDirty(false);
       setLastSaved(new Date().toLocaleTimeString('id-ID'));
-      showNotice('success', 'Jadwal sesi berhasil direset ke standar Pricelist FalseNine!');
+      showNotice('success', 'Jadwal sesi berhasil direset ke standar Pricelist Almansuri Arena!');
     } catch (err: any) {
       showNotice('error', err.message || 'Gagal mereset sesi ke standar.');
     } finally {
@@ -193,7 +193,7 @@ export const OwnerSlotSessionsTab: React.FC<OwnerSlotSessionsTabProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                FalseNine Arena Management
+                Almansuri Arena Management
               </span>
               <span className="text-xs text-stone-300">Konfigurasi Jadwal Resmi</span>
             </div>
@@ -252,7 +252,7 @@ export const OwnerSlotSessionsTab: React.FC<OwnerSlotSessionsTabProps> = ({
           <div className="flex items-center gap-2">
             <Tag className="w-4 h-4 text-emerald-700" />
             <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-              Panduan Standar Brosur FalseNine Arena
+              Panduan Standar Brosur Almansuri Arena
             </h4>
           </div>
           <span className="text-[11px] text-slate-500 font-medium">Brosur Resmi</span>

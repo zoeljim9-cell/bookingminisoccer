@@ -209,7 +209,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-stone-950">
                 Langkah {step} dari 3
               </span>
-              <span className="text-xs text-stone-300 font-medium">FalseNine Mini Soccer</span>
+              <span className="text-xs text-stone-300 font-medium">{settings.name || 'Almansuri Arena'}</span>
             </div>
             <h2 className="text-base sm:text-lg font-bold text-white mt-0.5">
               {step === 1 && 'Sesi Lapangan & Paket Tambahan'}
@@ -315,7 +315,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
                     <Award className="w-4 h-4 text-emerald-700" />
-                    <span>Member & Komunitas FalseNine</span>
+                    <span>Member & Komunitas {settings.name || 'Almansuri Arena'}</span>
                   </div>
                   {verifiedMember && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
@@ -390,7 +390,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
               <div className="border border-stone-200 rounded-xl p-4 bg-white space-y-2.5">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
                   <Camera className="w-4 h-4 text-emerald-800" />
-                  <span>Jasa Dokumentasi Foto Lapangan FalseNine</span>
+                  <span>Jasa Dokumentasi Foto Lapangan</span>
                 </div>
                 <div className="text-[11px] text-stone-500">
                   Fotografer profesional resmi lapangan untuk mengabadikan aksi tim & highlight pertandingan Anda.
@@ -539,7 +539,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                   />
                 </div>
                 <p className="text-[11px] text-stone-500 mt-1">
-                  Nomor WhatsApp digunakan untuk konfirmasi kedatangan dan pencarian kode booking di FalseNine.
+                  Nomor WhatsApp digunakan untuk konfirmasi kedatangan dan pencarian kode booking di {settings.name || 'Almansuri Arena'}.
                 </p>
               </div>
 
@@ -567,7 +567,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                       <input
                         id="input-team-name"
                         type="text"
-                        placeholder="Contoh: FalseNine FC / Garuda Muda"
+                        placeholder={`Contoh: ${settings.name || 'Almansuri'} FC / Garuda Muda`}
                         value={contactDraft.teamName}
                         onChange={(e) => onUpdateContactDraft({ teamName: e.target.value })}
                         className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-700"
@@ -601,7 +601,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                 <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
                   <span>RINGKASAN BOOKING RESMI</span>
                   <span className="bg-emerald-800 text-white px-2 py-0.5 rounded text-[10px]">
-                    FalseNine Mini Soccer
+                    {settings.name || 'Almansuri Arena'}
                   </span>
                 </div>
 
@@ -682,7 +682,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
               <div className="border border-stone-200 rounded-xl p-3.5 bg-stone-50 space-y-1.5 text-xs text-stone-600">
                 <div className="flex items-center gap-1.5 font-bold text-stone-800">
                   <Shield className="w-3.5 h-3.5 text-emerald-800" />
-                  <span>Ketentuan Pembayaran FalseNine</span>
+                  <span>Ketentuan Pembayaran {settings.name || 'Almansuri Arena'}</span>
                 </div>
                 <p>
                   <strong>Metode:</strong> {settings.paymentTerms}

@@ -165,7 +165,7 @@ export function mapSettingsToDb(settings: VenueSettings) {
   }
 
   return {
-    name: String(settings.name || 'FalseNine Mini Soccer'),
+    name: String(settings.name || 'Almansuri Arena'),
     address: String(settings.address || ''),
     gmapsUrl: String(settings.gmapsUrl || ''),
     ownerWhatsapp: String(settings.ownerWhatsapp || ''),

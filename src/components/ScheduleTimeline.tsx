@@ -146,7 +146,7 @@ export const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
-              FalseNine Arena
+              Almansuri Arena
             </span>
             <span className="text-xs text-stone-500 font-medium">Jadwal Sesi Resmi Lapangan</span>
           </div>

@@ -16,7 +16,7 @@ export const Header: React.FC<HeaderProps> = ({
   onScrollToBooking,
   onOpenOwner,
 }) => {
-  const venueName = venue?.name || 'MiniSoccer Arena';
+  const venueName = venue?.name || 'Almansuri Arena';
   const baseRate = venue?.baseHourlyRate || 300000;
   const address = venue?.address || 'Jakarta Selatan';
   const waFormatted = normalizeWhatsappNumber(venue?.ownerWhatsapp || '');

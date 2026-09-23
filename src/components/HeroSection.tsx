@@ -9,7 +9,7 @@ interface HeroSectionProps {
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({ venue, onScrollToBooking }) => {
-  const venueName = venue?.name || 'MiniSoccer Arena';
+  const venueName = venue?.name || 'Almansuri Arena';
   const baseRate = venue?.baseHourlyRate || 300000;
   const openTime = venue?.openTime || '07:00';
   const closeTime = venue?.closeTime || '23:00';

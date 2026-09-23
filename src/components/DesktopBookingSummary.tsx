@@ -28,7 +28,7 @@ export const DesktopBookingSummary: React.FC<DesktopBookingSummaryProps> = ({
   const endMins = startMins + durationMinutes;
   const endTime = minutesToTime(endMins);
 
-  const venueName = venue?.name || 'MiniSoccer Arena';
+  const venueName = venue?.name || 'Almansuri Arena';
   const baseRate = venue?.baseHourlyRate || 300000;
 
   return (

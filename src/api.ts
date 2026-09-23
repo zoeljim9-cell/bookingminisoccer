@@ -94,30 +94,20 @@ async function handleApiResponse<T>(res: Response, fallbackError: string): Promi
 
 // Fallback venue settings for resilience if serverless function encounters a temporary cold-start or error
 const FALLBACK_VENUE_SETTINGS: VenueSettings = {
-  name: 'MiniSoccer Arena',
-  address: 'Jl. Lapangan Hijau No. 18, Jakarta Selatan',
-  gmapsUrl: 'https://maps.google.com/?q=Jakarta',
-  ownerWhatsapp: '081234567890',
+  name: 'Almansuri Arena',
+  address: 'Jl. Lapangan Hijau No. 9, Jakarta Selatan',
+  gmapsUrl: 'https://maps.google.com/?q=Almansuri+Arena',
+  ownerWhatsapp: '082276079061',
   openTime: '07:00',
-  closeTime: '23:00',
+  closeTime: '02:00',
   closedDays: [],
   maxAdvanceDays: 30,
   minDurationMinutes: 60,
   allowedDurations: [60, 90, 120, 180],
   bufferMinutes: 0,
-  baseHourlyRate: 300000,
-  specialRates: [
-    {
-      id: 'rule-peak-night',
-      name: 'Tarif Malam (Peak Hour)',
-      hourlyRate: 350000,
-      days: [0, 1, 2, 3, 4, 5, 6],
-      startTime: '18:00',
-      endTime: '23:00',
-      isActive: true,
-    },
-  ],
-  paymentTerms: 'Pembayaran dilakukan di lokasi sebelum kick-off via Cash atau QRIS.',
+  baseHourlyRate: 350000,
+  specialRates: [],
+  paymentTerms: 'Pembayaran DP / Lunas dilakukan sebelum kick-off via Transfer Bank atau QRIS.',
   cancellationPolicy: 'Pembatalan bebas biaya dapat dilakukan maksimal 6 jam sebelum waktu main.',
 };
 
