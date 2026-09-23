@@ -231,7 +231,7 @@ export const TimeDurationPicker: React.FC<TimeDurationPickerProps> = ({
         <div className="flex items-center justify-between pb-2 mb-2 border-b border-stone-200/70">
           <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
             <Calculator className="w-3.5 h-3.5 text-emerald-700" />
-            Rincian Estimasi Biaya
+            Rincian Biaya Sewa
           </span>
           <span className="text-xs text-stone-500 font-medium">
             Tarif dasar: {formatRupiah(settings.baseHourlyRate)}/jam
@@ -260,7 +260,7 @@ export const TimeDurationPicker: React.FC<TimeDurationPickerProps> = ({
         </div>
 
         <div className="pt-2 border-t border-stone-200/80 flex items-center justify-between">
-          <span className="text-xs font-bold text-stone-800">Total Estimasi Biaya</span>
+          <span className="text-xs font-bold text-stone-800">Total Biaya Sewa</span>
           <span className="text-base sm:text-lg font-black text-emerald-800">
             {formatRupiah(priceResult.totalPrice)}
           </span>

@@ -2,11 +2,16 @@ import {
   Booking,
   CustomerBookingInput,
   FieldClosure,
+  Member,
+  MemberInput,
+  MemberVerifyResult,
   OwnerBookingInput,
   PriceCalculationResult,
   PublicScheduleResponse,
+  SlotSessionConfig,
   VenueSettings,
 } from './types';
+import { isWeekendDay, getDayOfWeek } from './utils/timeUtils';
 
 export const API_BASE = '/api';
 
@@ -133,6 +138,9 @@ export async function fetchPublicSchedule(date: string): Promise<PublicScheduleR
   } catch (err: any) {
     // If backend returns a server error, generate a fallback schedule so the user is never blocked
     console.warn('Gagal memuat jadwal dari server, menggunakan fallback jadwal:', err);
+    const isWeekend = isWeekendDay(date);
+    const dayOfWeek = getDayOfWeek(date);
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     return {
       date,
       venueName: FALLBACK_VENUE_SETTINGS.name,
@@ -140,6 +148,8 @@ export async function fetchPublicSchedule(date: string): Promise<PublicScheduleR
       closeTime: FALLBACK_VENUE_SETTINGS.closeTime,
       bufferMinutes: FALLBACK_VENUE_SETTINGS.bufferMinutes,
       baseHourlyRate: FALLBACK_VENUE_SETTINGS.baseHourlyRate,
+      isWeekend,
+      dayName: dayNames[dayOfWeek] || 'Hari',
       slots: [
         {
           startTime: FALLBACK_VENUE_SETTINGS.openTime,
@@ -148,6 +158,7 @@ export async function fetchPublicSchedule(date: string): Promise<PublicScheduleR
           label: 'Tersedia',
         },
       ],
+      slotSessions: [],
       freeRanges: [
         {
           startTime: FALLBACK_VENUE_SETTINGS.openTime,
@@ -171,7 +182,7 @@ export async function calculatePricePreview(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ date, startTime, durationMinutes }),
   });
-  return handleApiResponse<PriceCalculationResult>(res, 'Gagal menghitung estimasi biaya');
+  return handleApiResponse<PriceCalculationResult>(res, 'Gagal menghitung total biaya');
 }
 
 export async function submitCustomerBooking(
@@ -431,5 +442,102 @@ export async function fetchDbStatus(token: string): Promise<{
       message: err.message || 'Penyimpanan lokal aktif',
     };
   }
+}
+
+// -------------------------------------------------------------
+// MEMBER SYSTEM API HELPERS
+// -------------------------------------------------------------
+
+export async function verifyMemberApi(query: string): Promise<MemberVerifyResult> {
+  const res = await safeFetchWithRetry(`${API_BASE}/members/verify?query=${encodeURIComponent(query)}`);
+  return await handleApiResponse<MemberVerifyResult>(res, 'Gagal memeriksa status member');
+}
+
+export async function fetchOwnerMembers(token: string): Promise<Member[]> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/members`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await handleApiResponse<{ success: boolean; members: Member[] }>(res, 'Gagal memuat data member');
+  return data.members || [];
+}
+
+export async function ownerCreateMember(token: string, input: MemberInput): Promise<Member> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/members`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+  });
+  const data = await handleApiResponse<{ success: boolean; member: Member }>(res, 'Gagal membuat member');
+  return data.member;
+}
+
+export async function ownerUpdateMember(token: string, id: string, input: Partial<MemberInput>): Promise<Member> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/members/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+  });
+  const data = await handleApiResponse<{ success: boolean; member: Member }>(res, 'Gagal memperbarui member');
+  return data.member;
+}
+
+export async function ownerDeleteMember(token: string, id: string): Promise<void> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/members/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await handleApiResponse<any>(res, 'Gagal menghapus member');
+}
+
+// -------------------------------------------------------------
+// SLOT SESSIONS API HELPERS (Owner-Defined Scheduling)
+// -------------------------------------------------------------
+
+export async function fetchOwnerSlotSessions(token: string): Promise<SlotSessionConfig[]> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/slot-sessions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await handleApiResponse<{ success: boolean; slotSessions: SlotSessionConfig[] }>(
+    res,
+    'Gagal memuat jadwal sesi lapangan'
+  );
+  return data.slotSessions || [];
+}
+
+export async function ownerUpdateSlotSessions(
+  token: string,
+  slotSessions: SlotSessionConfig[]
+): Promise<{ slotSessions: SlotSessionConfig[]; mysqlSynced: boolean; message: string }> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/slot-sessions`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ slotSessions }),
+  });
+  return await handleApiResponse<{ slotSessions: SlotSessionConfig[]; mysqlSynced: boolean; message: string }>(
+    res,
+    'Gagal menyimpan jadwal sesi'
+  );
+}
+
+export async function ownerResetSlotSessionsDefault(
+  token: string
+): Promise<{ slotSessions: SlotSessionConfig[]; mysqlSynced: boolean; message: string }> {
+  const res = await safeFetchWithRetry(`${API_BASE}/owner/slot-sessions/reset-default`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return await handleApiResponse<{ slotSessions: SlotSessionConfig[]; mysqlSynced: boolean; message: string }>(
+    res,
+    'Gagal mereset jadwal sesi ke default'
+  );
 }
 

@@ -9,22 +9,23 @@ generator client {
 
 model VenueSetting {
   id                 String   @id @default("default")
-  name               String   @default("MiniSoccer Arena")
-  address            String   @default("Jl. Lapangan Hijau No. 10, Jakarta Selatan")
+  name               String   @default("FalseNine Mini Soccer")
+  address            String   @default("Jl. Lapangan Hijau No. 9, Jakarta")
   gmapsUrl           String   @default("https://maps.google.com")
-  ownerWhatsapp      String   @default("6281234567890")
+  ownerWhatsapp      String   @default("6282276079061")
   ownerPin           String   @default("1234")
   openTime           String   @default("07:00")
-  closeTime          String   @default("23:00")
+  closeTime          String   @default("02:00")
   closedDays         String   @default("[]")
   maxAdvanceDays     Int      @default(30)
   minDurationMinutes Int      @default(60)
-  allowedDurations   String   @default("[60,90,120,180]")
+  allowedDurations   String   @default("[60,90,120]")
   bufferMinutes      Int      @default(0)
-  baseHourlyRate     Int      @default(300000)
+  baseHourlyRate     Int      @default(350000)
   specialRates       String   @db.Text
   paymentTerms       String   @db.Text
   cancellationPolicy String   @db.Text
+  slotSessions       String?  @db.Text
   updatedAt          DateTime @updatedAt
 }
 
@@ -45,6 +46,10 @@ model Booking {
   paymentStatus      String   @default("unpaid")
   priceBreakdown     String   @db.Text
   totalPrice         Int
+  discountAmount     Int      @default(0)
+  memberId           String?
+  memberCode         String?
+  photographerAddon  String?  // "none", "1jam", "2jam"
   cancellationReason String?  @db.Text
   idempotencyKey     String?
   isDemo             Boolean  @default(false)
@@ -54,6 +59,7 @@ model Booking {
   @@index([date])
   @@index([bookingCode])
   @@index([secretToken])
+  @@index([memberCode])
 }
 
 model FieldClosure {
@@ -66,4 +72,22 @@ model FieldClosure {
   createdAt DateTime @default(now())
 
   @@index([date])
+}
+
+model Member {
+  id                 String   @id @default(uuid())
+  memberCode         String   @unique
+  name               String
+  whatsapp           String
+  teamName           String?
+  tier               String   @default("Regular") // "Regular", "VIP", "Komunitas"
+  discountPercentage Int      @default(10)
+  status             String   @default("active") // "active", "inactive"
+  notes              String?  @db.Text
+  totalBookings      Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([memberCode])
+  @@index([whatsapp])
 }

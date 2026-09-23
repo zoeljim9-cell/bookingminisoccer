@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { Booking, FieldClosure, VenueSettings } from '../src/types';
+import { Booking, FieldClosure, Member, SlotSessionConfig, VenueSettings } from '../src/types';
 
 // Global reference for Prisma Client to prevent multiple instances during hot reloads
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -47,17 +47,18 @@ export async function testMySqlConnection(): Promise<{ connected: boolean; table
     await client.$queryRawUnsafe('SELECT 1');
     isConnected = true;
 
-    // Verify whether all tables (VenueSetting, Booking, FieldClosure) exist and are readable
+    // Verify whether all tables (VenueSetting, Booking, FieldClosure, Member) exist and are readable
     try {
       await Promise.all([
         client.venueSetting.findFirst(),
         client.booking.findFirst(),
         client.fieldClosure.findFirst(),
+        client.member.findFirst(),
       ]);
       return {
         connected: true,
         tablesReady: true,
-        message: 'Terhubung ke database MySQL via Prisma & semua tabel (VenueSetting, Booking, FieldClosure) siap digunakan.',
+        message: 'Terhubung ke database MySQL via Prisma & semua tabel (VenueSetting, Booking, FieldClosure, Member) siap digunakan.',
       };
     } catch (tableErr: any) {
       if (
@@ -94,6 +95,15 @@ export function isMySqlConnected(): boolean {
 // Convert DB VenueSetting to VenueSettings type
 export function mapDbToSettings(dbSetting: any, fallback: VenueSettings): VenueSettings {
   try {
+    let slotSessions: SlotSessionConfig[] | undefined = undefined;
+    if (dbSetting.slotSessions) {
+      slotSessions = typeof dbSetting.slotSessions === 'string'
+        ? JSON.parse(dbSetting.slotSessions)
+        : dbSetting.slotSessions;
+    } else {
+      slotSessions = fallback.slotSessions;
+    }
+
     return {
       name: dbSetting.name || fallback.name,
       address: dbSetting.address || fallback.address,
@@ -116,6 +126,7 @@ export function mapDbToSettings(dbSetting: any, fallback: VenueSettings): VenueS
         : fallback.specialRates,
       paymentTerms: dbSetting.paymentTerms ?? fallback.paymentTerms,
       cancellationPolicy: dbSetting.cancellationPolicy ?? fallback.cancellationPolicy,
+      slotSessions,
     };
   } catch (e) {
     console.error('[Prisma] Error parsing DB settings JSON:', e);
@@ -132,7 +143,7 @@ export function mapSettingsToDb(settings: VenueSettings) {
     closedDaysStr = settings.closedDays;
   }
 
-  let allowedDurationsStr = '[60,90,120,180]';
+  let allowedDurationsStr = '[60,90,120]';
   if (Array.isArray(settings.allowedDurations)) {
     allowedDurationsStr = JSON.stringify(settings.allowedDurations);
   } else if (typeof settings.allowedDurations === 'string') {
@@ -146,23 +157,31 @@ export function mapSettingsToDb(settings: VenueSettings) {
     specialRatesStr = settings.specialRates;
   }
 
+  let slotSessionsStr = '[]';
+  if (Array.isArray(settings.slotSessions)) {
+    slotSessionsStr = JSON.stringify(settings.slotSessions);
+  } else if (typeof settings.slotSessions === 'string') {
+    slotSessionsStr = settings.slotSessions;
+  }
+
   return {
-    name: String(settings.name || 'MiniSoccer Arena'),
+    name: String(settings.name || 'FalseNine Mini Soccer'),
     address: String(settings.address || ''),
     gmapsUrl: String(settings.gmapsUrl || ''),
     ownerWhatsapp: String(settings.ownerWhatsapp || ''),
     ownerPin: '1234',
     openTime: String(settings.openTime || '07:00'),
-    closeTime: String(settings.closeTime || '23:00'),
+    closeTime: String(settings.closeTime || '02:00'),
     closedDays: closedDaysStr,
     maxAdvanceDays: Math.round(Number(settings.maxAdvanceDays)) || 30,
     minDurationMinutes: Math.round(Number(settings.minDurationMinutes)) || 60,
     allowedDurations: allowedDurationsStr,
     bufferMinutes: Math.round(Number(settings.bufferMinutes)) || 0,
-    baseHourlyRate: Math.round(Number(settings.baseHourlyRate)) || 300000,
+    baseHourlyRate: Math.round(Number(settings.baseHourlyRate)) || 350000,
     specialRates: specialRatesStr,
     paymentTerms: String(settings.paymentTerms || ''),
     cancellationPolicy: String(settings.cancellationPolicy || ''),
+    slotSessions: slotSessionsStr,
   };
 }
 
@@ -185,6 +204,10 @@ export function mapDbToBooking(b: any): Booking {
     paymentStatus: b.paymentStatus as any,
     priceBreakdown: b.priceBreakdown ? JSON.parse(b.priceBreakdown) : [],
     totalPrice: b.totalPrice,
+    discountAmount: b.discountAmount || 0,
+    memberId: b.memberId || undefined,
+    memberCode: b.memberCode || undefined,
+    photographerAddon: b.photographerAddon || undefined,
     cancellationReason: b.cancellationReason || undefined,
     idempotencyKey: b.idempotencyKey || undefined,
     isDemo: Boolean(b.isDemo),
@@ -212,9 +235,47 @@ export function mapBookingToDb(b: Booking) {
     paymentStatus: b.paymentStatus || 'unpaid',
     priceBreakdown: JSON.stringify(b.priceBreakdown || []),
     totalPrice: b.totalPrice,
+    discountAmount: b.discountAmount || 0,
+    memberId: b.memberId || null,
+    memberCode: b.memberCode || null,
+    photographerAddon: b.photographerAddon || null,
     cancellationReason: b.cancellationReason || null,
     idempotencyKey: b.idempotencyKey || null,
     isDemo: Boolean(b.isDemo),
+  };
+}
+
+// Convert DB Member to Member type
+export function mapDbToMember(m: any): Member {
+  return {
+    id: m.id,
+    memberCode: m.memberCode,
+    name: m.name,
+    whatsapp: m.whatsapp,
+    teamName: m.teamName || undefined,
+    tier: m.tier || 'Regular',
+    discountPercentage: typeof m.discountPercentage === 'number' ? m.discountPercentage : 10,
+    status: (m.status === 'inactive' ? 'inactive' : 'active') as 'active' | 'inactive',
+    notes: m.notes || undefined,
+    totalBookings: typeof m.totalBookings === 'number' ? m.totalBookings : 0,
+    createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : String(m.createdAt),
+    updatedAt: m.updatedAt instanceof Date ? m.updatedAt.toISOString() : String(m.updatedAt),
+  };
+}
+
+// Convert Member to DB payload
+export function mapMemberToDb(m: Member) {
+  return {
+    id: m.id,
+    memberCode: m.memberCode,
+    name: m.name,
+    whatsapp: m.whatsapp,
+    teamName: m.teamName || null,
+    tier: m.tier || 'Regular',
+    discountPercentage: m.discountPercentage ?? 10,
+    status: m.status || 'active',
+    notes: m.notes || null,
+    totalBookings: m.totalBookings || 0,
   };
 }
 

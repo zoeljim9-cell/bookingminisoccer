@@ -158,6 +158,7 @@ apiRouter.get('/venue-info', (req: Request, res: Response) => {
       specialRates: settings.specialRates.filter(r => r.isActive),
       paymentTerms: settings.paymentTerms,
       cancellationPolicy: settings.cancellationPolicy,
+      slotSessions: settings.slotSessions || [],
     });
   } catch (err: any) {
     console.error('Error in /venue-info:', err);
@@ -177,15 +178,44 @@ apiRouter.get('/schedule', (req: Request, res: Response) => {
   }
 });
 
-// Calculate price preview
+// Member Verification (Public for booking flow)
+apiRouter.get('/members/verify', (req: Request, res: Response) => {
+  try {
+    const query = (req.query.query as string) || '';
+    const result = store.verifyMember(query);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ valid: false, message: err.message || 'Gagal verifikasi member.' });
+  }
+});
+
+// Calculate price preview (Supports slot sessions, member discount, and photographer addon)
 apiRouter.post('/bookings/calculate-price', (req: Request, res: Response) => {
   try {
-    const { date, startTime, durationMinutes } = req.body || {};
+    const { date, startTime, durationMinutes, memberCode, photographerAddon } = req.body || {};
     if (!date || !startTime || !durationMinutes) {
       return res.status(400).json({ error: 'Parameter tanggal, waktu mulai, dan durasi wajib diisi.' });
     }
     const settings = store.getSettings();
-    const calculation = calculatePrice(date, startTime, Number(durationMinutes), settings);
+
+    let memberDiscountPercent = 0;
+    if (memberCode) {
+      const verifyRes = store.verifyMember(memberCode);
+      if (verifyRes.valid && verifyRes.member) {
+        memberDiscountPercent = verifyRes.member.discountPercentage || 0;
+      }
+    }
+
+    const calculation = calculatePrice(
+      date,
+      startTime,
+      Number(durationMinutes),
+      settings,
+      {
+        memberDiscountPercent,
+        photographerAddon,
+      }
+    );
     res.json(calculation);
   } catch (err: any) {
     console.error('Error in calculate-price:', err);
@@ -196,7 +226,17 @@ apiRouter.post('/bookings/calculate-price', (req: Request, res: Response) => {
 // Customer booking creation (atomic + collision check + idempotency)
 apiRouter.post('/bookings', async (req: Request, res: Response) => {
   try {
-    const { date, startTime, durationMinutes, customerName, customerWhatsapp, teamName, notes } = req.body || {};
+    const {
+      date,
+      startTime,
+      durationMinutes,
+      customerName,
+      customerWhatsapp,
+      teamName,
+      notes,
+      memberCode,
+      photographerAddon,
+    } = req.body || {};
     const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body?.idempotencyKey;
 
     if (!date || !startTime || !durationMinutes || !customerName || !customerWhatsapp) {
@@ -220,6 +260,8 @@ apiRouter.post('/bookings', async (req: Request, res: Response) => {
       customerWhatsapp,
       teamName,
       notes,
+      memberCode,
+      photographerAddon,
       idempotencyKey,
       bookingSource: 'online',
     });
@@ -313,13 +355,15 @@ apiRouter.post('/owner/logout', requireOwnerAuth, (req: Request, res: Response) 
   }
 });
 
-// Owner Dashboard: Get all bookings, closures, settings, and calculated stats
+// Owner Dashboard: Get all bookings, closures, settings, members, slotSessions, and calculated stats
 apiRouter.get('/owner/dashboard', requireOwnerAuth, (req: Request, res: Response) => {
   try {
     const todayJakarta = getJakartaDateString();
     const allBookings = store.getAllBookings();
     const closures = store.getAllClosures();
     const settings = store.getSettings();
+    const members = store.getAllMembers();
+    const slotSessions = store.getSlotSessions();
 
     const activeToday = allBookings.filter(b => b.date === todayJakarta && b.bookingStatus !== 'cancelled');
     const todayBookingsCount = activeToday.length;
@@ -337,10 +381,14 @@ apiRouter.get('/owner/dashboard', requireOwnerAuth, (req: Request, res: Response
         todayTotalHours,
         unpaidCount,
         unpaidTotalAmount,
+        totalMembersCount: members.length,
+        activeMembersCount: members.filter(m => m.status === 'active').length,
       },
       bookings: allBookings,
       closures,
       settings,
+      members,
+      slotSessions,
     });
   } catch (err: any) {
     console.error('Dashboard error:', err);
@@ -351,7 +399,19 @@ apiRouter.get('/owner/dashboard', requireOwnerAuth, (req: Request, res: Response
 // Owner Manual Booking
 apiRouter.post('/owner/bookings', requireOwnerAuth, async (req: Request, res: Response) => {
   try {
-    const { date, startTime, durationMinutes, customerName, customerWhatsapp, teamName, notes, bookingSource, paymentStatus } = req.body || {};
+    const {
+      date,
+      startTime,
+      durationMinutes,
+      customerName,
+      customerWhatsapp,
+      teamName,
+      notes,
+      bookingSource,
+      paymentStatus,
+      memberCode,
+      photographerAddon,
+    } = req.body || {};
     if (!date || !startTime || !durationMinutes || !customerName || !customerWhatsapp) {
       return res.status(400).json({ error: 'Mohon lengkapi informasi booking.' });
     }
@@ -364,6 +424,8 @@ apiRouter.post('/owner/bookings', requireOwnerAuth, async (req: Request, res: Re
       customerWhatsapp,
       teamName,
       notes,
+      memberCode,
+      photographerAddon,
       bookingSource: bookingSource || 'whatsapp',
       paymentStatus: paymentStatus || 'unpaid',
     });
@@ -372,6 +434,110 @@ apiRouter.post('/owner/bookings', requireOwnerAuth, async (req: Request, res: Re
   } catch (err: any) {
     console.error('Manual booking error:', err);
     res.status(409).json({ error: err.message || 'Gagal menambahkan booking manual.' });
+  }
+});
+
+// -------------------------------------------------------------
+// OWNER MEMBER MANAGEMENT
+// -------------------------------------------------------------
+apiRouter.get('/owner/members', requireOwnerAuth, (req: Request, res: Response) => {
+  try {
+    const members = store.getAllMembers();
+    res.json({ success: true, members });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal memuat daftar member.' });
+  }
+});
+
+apiRouter.post('/owner/members', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const { name, whatsapp, teamName, tier, discountPercentage, status, notes } = req.body || {};
+    if (!name || !whatsapp) {
+      return res.status(400).json({ error: 'Nama member dan nomor WhatsApp wajib diisi.' });
+    }
+    const member = await store.createMember({
+      name,
+      whatsapp,
+      teamName,
+      tier: tier || 'Regular',
+      discountPercentage: Number(discountPercentage) || 10,
+      status: status || 'active',
+      notes,
+    });
+    res.status(201).json({ success: true, member });
+  } catch (err: any) {
+    console.error('Create member error:', err);
+    res.status(400).json({ error: err.message || 'Gagal membuat member baru.' });
+  }
+});
+
+apiRouter.put('/owner/members/:id', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const member = await store.updateMember(id, req.body || {});
+    res.json({ success: true, member });
+  } catch (err: any) {
+    console.error('Update member error:', err);
+    res.status(400).json({ error: err.message || 'Gagal memperbarui member.' });
+  }
+});
+
+apiRouter.delete('/owner/members/:id', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await store.deleteMember(id);
+    res.json({ success: true, message: 'Member berhasil dihapus.' });
+  } catch (err: any) {
+    console.error('Delete member error:', err);
+    res.status(400).json({ error: err.message || 'Gagal menghapus member.' });
+  }
+});
+
+// -------------------------------------------------------------
+// OWNER SLOT SESSIONS MANAGEMENT (Owner Defined Scheduling)
+// -------------------------------------------------------------
+apiRouter.get('/owner/slot-sessions', requireOwnerAuth, (req: Request, res: Response) => {
+  try {
+    const slotSessions = store.getSlotSessions();
+    res.json({ success: true, slotSessions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal memuat slot sessions.' });
+  }
+});
+
+apiRouter.put('/owner/slot-sessions', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const { slotSessions } = req.body || {};
+    if (!Array.isArray(slotSessions)) {
+      return res.status(400).json({ error: 'slotSessions harus berupa array konfigurasi sesi.' });
+    }
+    const result = await store.updateSlotSessions(slotSessions);
+    res.json({
+      success: true,
+      slotSessions: result.slotSessions,
+      mysqlSynced: result.mysqlSynced,
+      message: result.mysqlSynced
+        ? 'Jadwal sesi lapangan berhasil disimpan ke database MySQL.'
+        : 'Jadwal sesi lapangan tersimpan di sistem lokal.',
+    });
+  } catch (err: any) {
+    console.error('Update slot sessions error:', err);
+    res.status(400).json({ error: err.message || 'Gagal memperbarui slot sessions.' });
+  }
+});
+
+apiRouter.post('/owner/slot-sessions/reset-default', requireOwnerAuth, async (req: Request, res: Response) => {
+  try {
+    const result = await store.resetSlotsToDefault();
+    res.json({
+      success: true,
+      slotSessions: result.slotSessions,
+      mysqlSynced: result.mysqlSynced,
+      message: 'Jadwal sesi berhasil direset ke standar Pricelist FalseNine resmi dan disinkronkan ke MySQL.',
+    });
+  } catch (err: any) {
+    console.error('Reset slot sessions error:', err);
+    res.status(500).json({ error: err.message || 'Gagal mereset slot sessions.' });
   }
 });
 

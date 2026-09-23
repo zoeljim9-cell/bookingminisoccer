@@ -30,8 +30,12 @@ import {
   Loader2,
   Database,
   ExternalLink,
+  Layers,
+  Award,
 } from 'lucide-react';
 import { Booking, BookingSource, BookingStatus, FieldClosure, PaymentStatus, SpecialRateRule, VenueSettings } from '../types';
+import { OwnerSlotSessionsTab } from './OwnerSlotSessionsTab';
+import { OwnerMembersTab } from './OwnerMembersTab';
 import {
   calculatePrice,
   formatDuration,
@@ -86,7 +90,7 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
   const [settings, setSettings] = useState<VenueSettings | null>(null);
 
   // Current tab in owner panel
-  const [activeTab, setActiveTab] = useState<'daily' | 'closures' | 'settings'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'closures' | 'settings' | 'slotSessions' | 'members'>('daily');
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -367,7 +371,33 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                     }`}
                   >
-                    Pengaturan
+                    Pengaturan Venue
+                  </button>
+                  <button
+                    type="button"
+                    id="tab-owner-slot-sessions"
+                    onClick={() => setActiveTab('slotSessions')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap min-h-[38px] active:scale-95 flex items-center gap-1.5 ${
+                      activeTab === 'slotSessions'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Sesi Jadwal Lapangan</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="tab-owner-members"
+                    onClick={() => setActiveTab('members')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap min-h-[38px] active:scale-95 flex items-center gap-1.5 ${
+                      activeTab === 'members'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Sistem Member</span>
                   </button>
                 </div>
 
@@ -792,6 +822,29 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ onBackToCustomer, onSche
               />
             )}
           </div>
+        )}
+
+        {/* TAB 4: OFFICIAL SLOT SESSIONS */}
+        {activeTab === 'slotSessions' && settings && (
+          <OwnerSlotSessionsTab
+            token={token!}
+            initialSessions={settings.slotSessions || []}
+            onSessionsUpdated={(newSessions) => {
+              setSettings((prev) => (prev ? { ...prev, slotSessions: newSessions } : prev));
+              if (onScheduleUpdated) {
+                onScheduleUpdated();
+              }
+            }}
+            showNotice={showNotice}
+          />
+        )}
+
+        {/* TAB 5: MEMBERS & COMMUNITY */}
+        {activeTab === 'members' && (
+          <OwnerMembersTab
+            token={token!}
+            showNotice={showNotice}
+          />
         )}
 
         {/* MODAL: ADD MANUAL BOOKING (Section 6) */}

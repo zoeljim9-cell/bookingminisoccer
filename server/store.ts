@@ -1,8 +1,32 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { Booking, FieldClosure, VenueSettings, PriceCalculationResult, CustomerBookingInput, OwnerBookingInput } from '../src/types';
-import { checkCollision, calculatePrice, getJakartaDateString, generatePublicSchedule, timeToMinutes, minutesToTime, normalizeWhatsappNumber } from '../src/utils/timeUtils';
+import {
+  Booking,
+  CustomerBookingInput,
+  FieldClosure,
+  Member,
+  MemberInput,
+  MemberVerifyResult,
+  OwnerBookingInput,
+  PriceCalculationResult,
+  PublicScheduleResponse,
+  PublicSlotSession,
+  SlotSessionConfig,
+  VenueSettings,
+} from '../src/types';
+import {
+  checkCollision,
+  calculatePrice,
+  getJakartaDateString,
+  getJakartaCurrentMinutes,
+  generatePublicSchedule,
+  timeToMinutes,
+  minutesToTime,
+  normalizeWhatsappNumber,
+  isWeekendDay,
+  getDayOfWeek,
+} from '../src/utils/timeUtils';
 import {
   getPrismaClient,
   mapDbToSettings,
@@ -10,6 +34,8 @@ import {
   mapDbToBooking,
   mapBookingToDb,
   mapDbToClosure,
+  mapDbToMember,
+  mapMemberToDb,
 } from './prisma';
 
 // In Vercel / AWS Lambda serverless functions, only /tmp is writable; locally process.cwd()/data is used
@@ -26,35 +52,217 @@ export interface DatabaseSchema {
   settings: VenueSettings;
   bookings: Booking[];
   closures: FieldClosure[];
+  members: Member[];
   ownerToken?: string;
 }
 
-const DEFAULT_SETTINGS: VenueSettings = {
-  name: 'MiniSoccer Arena',
-  address: 'Jl. Lapangan Hijau No. 18, Jakarta Selatan',
-  gmapsUrl: 'https://maps.google.com/?q=Jakarta',
-  ownerWhatsapp: '6281234567890',
+// 14 Sesi Jadwal Tetap Resmi FalseNine Mini Soccer sesuai brosur pricelist
+export const DEFAULT_FALSENINE_SLOTS: SlotSessionConfig[] = [
+  {
+    id: 'fn-slot-1',
+    startTime: '07:00',
+    endTime: '08:00',
+    durationMinutes: 60,
+    weekdayPrice: 350000,
+    weekendPrice: 465000,
+    label: 'Pagi 1',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-2',
+    startTime: '08:00',
+    endTime: '09:00',
+    durationMinutes: 60,
+    weekdayPrice: 350000,
+    weekendPrice: 465000,
+    label: 'Pagi 2',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-3',
+    startTime: '09:00',
+    endTime: '10:00',
+    durationMinutes: 60,
+    weekdayPrice: 350000,
+    weekendPrice: 465000,
+    label: 'Pagi 3',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-4',
+    startTime: '10:00',
+    endTime: '11:00',
+    durationMinutes: 60,
+    weekdayPrice: 300000,
+    weekendPrice: 365000,
+    label: 'Siang 1',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-5',
+    startTime: '11:00',
+    endTime: '12:00',
+    durationMinutes: 60,
+    weekdayPrice: 300000,
+    weekendPrice: 365000,
+    label: 'Siang 2',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-6',
+    startTime: '12:00',
+    endTime: '13:00',
+    durationMinutes: 60,
+    weekdayPrice: 300000,
+    weekendPrice: 365000,
+    label: 'Siang 3',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-7',
+    startTime: '13:00',
+    endTime: '14:00',
+    durationMinutes: 60,
+    weekdayPrice: 300000,
+    weekendPrice: 365000,
+    label: 'Siang 4',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-8',
+    startTime: '14:00',
+    endTime: '15:00',
+    durationMinutes: 60,
+    weekdayPrice: 300000,
+    weekendPrice: 365000,
+    label: 'Sore 1',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-9',
+    startTime: '15:00',
+    endTime: '16:00',
+    durationMinutes: 60,
+    weekdayPrice: 365000,
+    weekendPrice: 365000,
+    label: 'Sore 2',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-10',
+    startTime: '16:00',
+    endTime: '17:00',
+    durationMinutes: 60,
+    weekdayPrice: 435000,
+    weekendPrice: 465000,
+    label: 'Sore 3',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-11',
+    startTime: '17:00',
+    endTime: '18:30',
+    durationMinutes: 90,
+    weekdayPrice: 525000,
+    weekendPrice: 565000,
+    label: 'Senja (1.5 Jam)',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-12',
+    startTime: '20:00',
+    endTime: '22:00',
+    durationMinutes: 120,
+    weekdayPrice: 950000,
+    weekendPrice: 990000,
+    label: 'Prime Night 1 (2 Jam)',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-13',
+    startTime: '22:00',
+    endTime: '00:00',
+    durationMinutes: 120,
+    weekdayPrice: 950000,
+    weekendPrice: 990000,
+    label: 'Prime Night 2 (2 Jam)',
+    isActive: true,
+  },
+  {
+    id: 'fn-slot-14',
+    startTime: '00:00',
+    endTime: '02:00',
+    durationMinutes: 120,
+    weekdayPrice: 800000,
+    weekendPrice: 950000,
+    label: 'Midnight Session (2 Jam)',
+    isActive: true,
+  },
+];
+
+// Member Awal Bawaan
+export const DEFAULT_MEMBERS: Member[] = [
+  {
+    id: 'mem-f9-001',
+    memberCode: 'FN-MBR-001',
+    name: 'Garuda Muda FC',
+    whatsapp: '081234567890',
+    teamName: 'Garuda Muda FC',
+    tier: 'VIP',
+    discountPercentage: 10,
+    status: 'active',
+    notes: 'Member aktif rutin main tiap Selasa & Jumat malam',
+    totalBookings: 8,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mem-f9-002',
+    memberCode: 'FN-MBR-002',
+    name: 'Komunitas MiniSoccer Batavia',
+    whatsapp: '085712345678',
+    teamName: 'Batavia Squad',
+    tier: 'Komunitas',
+    discountPercentage: 10,
+    status: 'active',
+    notes: 'Komunitas rutin akhir pekan',
+    totalBookings: 12,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'mem-f9-003',
+    memberCode: 'FN-MBR-003',
+    name: 'FalseNine Academy',
+    whatsapp: '082276079061',
+    teamName: 'F9 Youngsters',
+    tier: 'Gold',
+    discountPercentage: 15,
+    status: 'active',
+    notes: 'Akademi binaan internal FalseNine',
+    totalBookings: 20,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+export const DEFAULT_SETTINGS: VenueSettings = {
+  name: 'FalseNine Mini Soccer',
+  address: 'Jl. Lapangan Hijau No. 9, Jakarta',
+  gmapsUrl: 'https://maps.google.com/?q=FalseNine+Mini+Soccer',
+  ownerWhatsapp: '0822-7607-9061',
   openTime: '07:00',
-  closeTime: '23:00',
+  closeTime: '02:00',
   closedDays: [],
   maxAdvanceDays: 30,
   minDurationMinutes: 60,
-  allowedDurations: [60, 90, 120, 180],
+  allowedDurations: [60, 90, 120],
   bufferMinutes: 0,
-  baseHourlyRate: 300000,
-  specialRates: [
-    {
-      id: 'rule-peak-night',
-      name: 'Tarif Malam (Peak Hour)',
-      hourlyRate: 350000,
-      days: [0, 1, 2, 3, 4, 5, 6],
-      startTime: '18:00',
-      endTime: '23:00',
-      isActive: true,
-    },
-  ],
-  paymentTerms: 'Pembayaran dilakukan di lokasi sebelum kick-off via Cash atau QRIS.',
-  cancellationPolicy: 'Pembatalan bebas biaya dapat dilakukan maksimal 6 jam sebelum waktu main.',
+  baseHourlyRate: 350000,
+  specialRates: [],
+  paymentTerms: 'Pembayaran DP / Lunas dilakukan sebelum kick-off via Transfer Bank atau QRIS.',
+  cancellationPolicy: 'Pembatalan bebas biaya dapat dilakukan maksimal 6 jam sebelum jadwal kick-off.',
+  slotSessions: DEFAULT_FALSENINE_SLOTS,
 };
 
 export function getInitialDemoData(): DatabaseSchema {
@@ -170,6 +378,7 @@ export function getInitialDemoData(): DatabaseSchema {
     settings: { ...DEFAULT_SETTINGS },
     bookings: demoBookings,
     closures: demoClosures,
+    members: DEFAULT_MEMBERS,
   };
 }
 
@@ -199,14 +408,35 @@ class Store {
     const prisma = getPrismaClient();
     if (!prisma) return;
     try {
-      // 1. Sync settings - MySQL is Source of Truth
+      // 1. Sync settings - Upgrade older settings or missing slotSessions to FalseNine flyer slots
       const existingSetting = await prisma.venueSetting.findFirst();
       if (existingSetting) {
-        this.data.settings = mapDbToSettings(existingSetting, this.data.settings);
-        console.log('[Prisma] Pengaturan venue disinkronkan dari MySQL:', {
-          id: existingSetting.id,
-          name: this.data.settings.name,
-        });
+        const hasSlotSessions = existingSetting.slotSessions && existingSetting.slotSessions !== '[]';
+        const isOldMiniSoccer = existingSetting.name === 'MiniSoccer Arena';
+        if (!hasSlotSessions || isOldMiniSoccer) {
+          this.data.settings = {
+            ...this.data.settings,
+            ...mapDbToSettings(existingSetting, this.data.settings),
+            name: 'FalseNine Mini Soccer',
+            ownerWhatsapp: '0822-7607-9061',
+            openTime: '07:00',
+            closeTime: '02:00',
+            baseHourlyRate: 350000,
+            slotSessions: DEFAULT_FALSENINE_SLOTS,
+          };
+          const payload = mapSettingsToDb(this.data.settings);
+          await prisma.venueSetting.update({
+            where: { id: existingSetting.id },
+            data: payload,
+          });
+          console.log('[Prisma] Venue setting diperbarui dengan Pricelist FalseNine resmi di MySQL.');
+        } else {
+          this.data.settings = mapDbToSettings(existingSetting, this.data.settings);
+          console.log('[Prisma] Pengaturan venue disinkronkan dari MySQL:', {
+            id: existingSetting.id,
+            name: this.data.settings.name,
+          });
+        }
       } else {
         const payload = mapSettingsToDb(this.data.settings);
         await prisma.venueSetting.upsert({
@@ -214,22 +444,19 @@ class Store {
           create: { id: 'default', ...payload },
           update: payload,
         });
-        console.log('[Prisma] Pengaturan venue default berhasil diinisialisasi ke MySQL.');
+        console.log('[Prisma] Pengaturan venue FalseNine berhasil diinisialisasi ke MySQL.');
       }
 
       // 2. Sync bookings - MySQL is primary Source of Truth
       const count = await prisma.booking.count();
       if (count > 0) {
         const dbBookings = await prisma.booking.findMany({ orderBy: { createdAt: 'desc' } });
-        // MySQL is the absolute truth for bookings: replace in-memory data with MySQL rows
         this.data.bookings = dbBookings.map(mapDbToBooking);
       } else if (!this.isMySqlConfigured && this.data.bookings.length > 0) {
-        // Only seed to DB if MySQL was not configured as production source of truth
         for (const b of this.data.bookings) {
           await prisma.booking.create({ data: mapBookingToDb(b) }).catch(() => {});
         }
       } else if (this.isMySqlConfigured) {
-        // If MySQL has 0 bookings in production, keep bookings empty (no demo data injection)
         this.data.bookings = [];
       }
 
@@ -255,6 +482,20 @@ class Store {
         this.data.closures = [];
       }
 
+      // 4. Sync members - MySQL is Source of Truth
+      const memberCount = await prisma.member.count();
+      if (memberCount > 0) {
+        const dbMembers = await prisma.member.findMany({ orderBy: { createdAt: 'desc' } });
+        this.data.members = dbMembers.map(mapDbToMember);
+      } else {
+        const seeds = (this.data.members && this.data.members.length > 0) ? this.data.members : DEFAULT_MEMBERS;
+        for (const m of seeds) {
+          await prisma.member.create({ data: mapMemberToDb(m) }).catch(() => {});
+        }
+        const dbMembers = await prisma.member.findMany({ orderBy: { createdAt: 'desc' } });
+        this.data.members = dbMembers.map(mapDbToMember);
+      }
+
       this.saveToDisk(this.data);
       console.log('[Store] Berhasil sinkronisasi dengan database MySQL via Prisma (MySQL is Source of Truth).');
     } catch (err: any) {
@@ -270,13 +511,13 @@ class Store {
       if (fs.existsSync(DB_FILE)) {
         const content = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(content);
-        // Exclude demo records
         const nonDemoBookings = (parsed.bookings || []).filter((b: any) => !b.isDemo && !b.id?.startsWith('demo-'));
         const nonDemoClosures = (parsed.closures || []).filter((c: any) => !c.isDemo && !c.id?.startsWith('demo-'));
         return {
           settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
           bookings: nonDemoBookings,
           closures: nonDemoClosures,
+          members: parsed.members || DEFAULT_MEMBERS,
         };
       }
     } catch (err) {
@@ -286,6 +527,7 @@ class Store {
       settings: { ...DEFAULT_SETTINGS },
       bookings: [],
       closures: [],
+      members: DEFAULT_MEMBERS,
     };
     this.saveToDisk(clean);
     return clean;
@@ -303,17 +545,18 @@ class Store {
           settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
           bookings: parsed.bookings || [],
           closures: parsed.closures || [],
+          members: parsed.members || DEFAULT_MEMBERS,
         };
       }
     } catch (err) {
       console.warn('Could not read db file, initializing with demo data', err);
     }
-    // When DATABASE_URL is configured, do not create demo data on disk
     if (this.isMySqlConfigured) {
       const clean: DatabaseSchema = {
         settings: { ...DEFAULT_SETTINGS },
         bookings: [],
         closures: [],
+        members: DEFAULT_MEMBERS,
       };
       this.saveToDisk(clean);
       return clean;
@@ -434,19 +677,119 @@ class Store {
     return [...this.data.closures];
   }
 
-  public getPublicSchedule(dateStr: string) {
-    const { slots, freeRanges, isFull } = generatePublicSchedule(
+  public getPublicSchedule(dateStr: string): PublicScheduleResponse {
+    const { slots, freeRanges, isFull: legacyIsFull } = generatePublicSchedule(
       dateStr,
       this.data.bookings,
       this.data.closures,
       this.data.settings
     );
 
+    const isWeekend = isWeekendDay(dateStr);
+    const day = getDayOfWeek(dateStr);
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const dayName = dayNames[day];
+
+    const slotConfigs = (this.data.settings.slotSessions && this.data.settings.slotSessions.length > 0)
+      ? this.data.settings.slotSessions
+      : DEFAULT_FALSENINE_SLOTS;
+
+    const todayJakarta = getJakartaDateString();
+    const currentMins = dateStr === todayJakarta ? getJakartaCurrentMinutes() : -1;
+
+    const slotSessions: PublicSlotSession[] = slotConfigs.map((cfg) => {
+      const startM = timeToMinutes(cfg.startTime);
+      let endM = timeToMinutes(cfg.endTime);
+      if (endM <= startM) {
+        endM += 1440; // overnight slots (e.g. 22:00-00:00 or 00:00-02:00)
+      }
+      const effectivePrice = isWeekend ? cfg.weekendPrice : cfg.weekdayPrice;
+
+      if (!cfg.isActive) {
+        return {
+          ...cfg,
+          effectivePrice,
+          isWeekend,
+          status: 'closed',
+          reason: 'Sesi dinonaktifkan',
+        };
+      }
+
+      // Past check
+      if (dateStr < todayJakarta || (dateStr === todayJakarta && currentMins > startM)) {
+        return {
+          ...cfg,
+          effectivePrice,
+          isWeekend,
+          status: 'past',
+          reason: 'Waktu sesi sudah lewat',
+        };
+      }
+
+      // Closure check
+      const conflictingClosure = this.data.closures.find(c => {
+        if (c.date !== dateStr) return false;
+        const cStart = timeToMinutes(c.startTime);
+        let cEnd = timeToMinutes(c.endTime);
+        if (cEnd <= cStart) cEnd += 1440;
+        return startM < cEnd && endM > cStart;
+      });
+      if (conflictingClosure) {
+        return {
+          ...cfg,
+          effectivePrice,
+          isWeekend,
+          status: 'closed',
+          reason: `Ditutup: ${conflictingClosure.reason}`,
+        };
+      }
+
+      // Booking check
+      const conflictingBooking = this.data.bookings.find(b => {
+        if (b.date !== dateStr || b.bookingStatus === 'cancelled') return false;
+        const bStart = timeToMinutes(b.startTime);
+        let bEnd = timeToMinutes(b.endTime);
+        if (bEnd <= bStart) bEnd += 1440;
+        return startM < bEnd && endM > bStart;
+      });
+      if (conflictingBooking) {
+        return {
+          ...cfg,
+          effectivePrice,
+          isWeekend,
+          status: 'booked',
+          bookedBy: conflictingBooking.teamName || conflictingBooking.customerName,
+          reason: 'Sudah dipesan',
+        };
+      }
+
+      return {
+        ...cfg,
+        effectivePrice,
+        isWeekend,
+        status: 'available',
+      };
+    });
+
+    const openM = timeToMinutes(this.data.settings.openTime || '07:00');
+    slotSessions.sort((a, b) => {
+      let startA = timeToMinutes(a.startTime);
+      let startB = timeToMinutes(b.startTime);
+      if (startA < openM) startA += 1440;
+      if (startB < openM) startB += 1440;
+      if (startA !== startB) return startA - startB;
+      return a.durationMinutes - b.durationMinutes;
+    });
+
+    const isFull = slotSessions.length > 0
+      ? slotSessions.every(s => s.status !== 'available')
+      : legacyIsFull;
+
     // If full, find nearest available dates
     let nearestAvailableDates: string[] = [];
     if (isFull) {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const baseDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+      const [year, month, dayNum] = dateStr.split('-').map(Number);
+      const baseDate = new Date(Date.UTC(year, month - 1, dayNum, 12, 0, 0));
       for (let i = 1; i <= 7; i++) {
         const checkDate = new Date(baseDate.getTime() + i * 86400000);
         const checkStr = checkDate.toISOString().slice(0, 10);
@@ -465,7 +808,10 @@ class Store {
       closeTime: this.data.settings.closeTime,
       bufferMinutes: this.data.settings.bufferMinutes,
       baseHourlyRate: this.data.settings.baseHourlyRate,
+      isWeekend,
+      dayName,
       slots,
+      slotSessions,
       freeRanges,
       isFull,
       nearestAvailableDates,
@@ -491,7 +837,9 @@ class Store {
     });
   }
 
-  public async createBookingAtomic(input: CustomerBookingInput & { bookingSource?: any; paymentStatus?: any }): Promise<Booking> {
+  public async createBookingAtomic(
+    input: CustomerBookingInput & { bookingSource?: any; paymentStatus?: any }
+  ): Promise<Booking> {
     return this.withDateLock(input.date, async () => {
       // Check idempotency cache
       if (input.idempotencyKey) {
@@ -525,13 +873,35 @@ class Store {
         throw new Error(collision.reason || 'Jadwal yang dipilih sudah terisi atau tidak tersedia.');
       }
 
-      // Calculate price
-      const priceCalc = calculatePrice(input.date, input.startTime, input.durationMinutes, this.data.settings);
+      // Check member if provided
+      let matchedMember: Member | undefined = undefined;
+      let memberDiscountPercent = 0;
+      if (input.memberCode) {
+        const verifyRes = this.verifyMember(input.memberCode);
+        if (verifyRes.valid && verifyRes.member) {
+          matchedMember = (this.data.members || []).find(m => m.id === verifyRes.member!.id);
+          if (matchedMember) {
+            memberDiscountPercent = matchedMember.discountPercentage || 10;
+          }
+        }
+      }
+
+      // Calculate price with options (slot sessions, member discount, photographer)
+      const priceCalc = calculatePrice(
+        input.date,
+        input.startTime,
+        input.durationMinutes,
+        this.data.settings,
+        {
+          memberDiscountPercent,
+          photographerAddon: input.photographerAddon,
+        }
+      );
 
       // Generate booking code & secret token
       const datePart = input.date.replace(/-/g, '').slice(2); // e.g. 260921
       const randPart = crypto.randomBytes(2).toString('hex').toUpperCase();
-      const bookingCode = `MS-${datePart}-${randPart}`;
+      const bookingCode = `FN-${datePart}-${randPart}`;
       const secretToken = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
 
       const newBooking: Booking = {
@@ -551,12 +921,32 @@ class Store {
         paymentStatus: input.paymentStatus || 'unpaid',
         priceBreakdown: priceCalc.segments,
         totalPrice: priceCalc.totalPrice,
+        discountAmount: priceCalc.discountAmount || 0,
+        memberId: matchedMember?.id,
+        memberCode: matchedMember?.memberCode,
+        photographerAddon: input.photographerAddon || 'none',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         idempotencyKey: input.idempotencyKey,
       };
 
       this.data.bookings.push(newBooking);
+
+      // If member used, increment totalBookings
+      if (matchedMember) {
+        matchedMember.totalBookings = (matchedMember.totalBookings || 0) + 1;
+        matchedMember.updatedAt = new Date().toISOString();
+        const prisma = getPrismaClient();
+        if (prisma) {
+          prisma.member
+            .updateMany({
+              where: { id: matchedMember.id },
+              data: { totalBookings: matchedMember.totalBookings, updatedAt: new Date(matchedMember.updatedAt) },
+            })
+            .catch(() => {});
+        }
+      }
+
       this.saveToDisk(this.data);
 
       const prisma = getPrismaClient();
@@ -575,6 +965,193 @@ class Store {
 
       return newBooking;
     });
+  }
+
+  // -----------------------------------------------------------------
+  // MEMBER MANAGEMENT METHODS (MySQL + Memory)
+  // -----------------------------------------------------------------
+  public getAllMembers(): Member[] {
+    return [...(this.data.members || [])];
+  }
+
+  public getMemberById(id: string): Member | undefined {
+    return (this.data.members || []).find(m => m.id === id);
+  }
+
+  public verifyMember(query: string): MemberVerifyResult {
+    if (!query || typeof query !== 'string') {
+      return { valid: false, message: 'Masukkan Kode Member atau Nomor WhatsApp' };
+    }
+    const cleanQ = query.trim().toUpperCase();
+    const cleanPhone = normalizeWhatsappNumber(query);
+
+    const member = (this.data.members || []).find(m => {
+      const matchCode = m.memberCode.toUpperCase() === cleanQ;
+      const matchPhone = Boolean(
+        cleanPhone && (
+          normalizeWhatsappNumber(m.whatsapp) === cleanPhone ||
+          m.whatsapp.replace(/[^0-9]/g, '').endsWith(cleanPhone.slice(-8))
+        )
+      );
+      return matchCode || matchPhone;
+    });
+
+    if (!member) {
+      return {
+        valid: false,
+        message: 'Member tidak ditemukan. Pastikan Kode Member atau Nomor WhatsApp sudah terdaftar.',
+      };
+    }
+
+    if (member.status !== 'active') {
+      return {
+        valid: false,
+        message: `Member "${member.name}" saat ini berstatus non-aktif.`,
+      };
+    }
+
+    return {
+      valid: true,
+      member: {
+        id: member.id,
+        memberCode: member.memberCode,
+        name: member.name,
+        whatsapp: member.whatsapp,
+        teamName: member.teamName,
+        tier: member.tier,
+        discountPercentage: member.discountPercentage,
+      },
+      message: `Member ${member.tier} aktif: ${member.name} (Diskon ${member.discountPercentage}%)`,
+    };
+  }
+
+  public async createMember(input: MemberInput): Promise<Member> {
+    const members = this.data.members || [];
+    const nextNum = members.length + 1;
+    const memberCode = `FN-MBR-${String(nextNum).padStart(3, '0')}`;
+    const newMember: Member = {
+      id: crypto.randomUUID(),
+      memberCode,
+      name: input.name.trim(),
+      whatsapp: normalizeWhatsappNumber(input.whatsapp) || input.whatsapp.trim(),
+      teamName: input.teamName?.trim(),
+      tier: input.tier || 'Regular',
+      discountPercentage: typeof input.discountPercentage === 'number' ? input.discountPercentage : 10,
+      status: input.status || 'active',
+      notes: input.notes?.trim(),
+      totalBookings: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    members.unshift(newMember);
+    this.data.members = members;
+    this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      try {
+        await prisma.member.create({ data: mapMemberToDb(newMember) });
+      } catch (err: any) {
+        console.warn('[Prisma] Gagal simpan member ke MySQL:', err.message);
+      }
+    }
+
+    return newMember;
+  }
+
+  public async updateMember(id: string, input: Partial<MemberInput>): Promise<Member> {
+    const member = this.getMemberById(id);
+    if (!member) throw new Error('Member tidak ditemukan.');
+
+    if (input.name !== undefined) member.name = input.name.trim();
+    if (input.whatsapp !== undefined) member.whatsapp = normalizeWhatsappNumber(input.whatsapp) || input.whatsapp.trim();
+    if (input.teamName !== undefined) member.teamName = input.teamName.trim();
+    if (input.tier !== undefined) member.tier = input.tier;
+    if (input.discountPercentage !== undefined) member.discountPercentage = Number(input.discountPercentage);
+    if (input.status !== undefined) member.status = input.status;
+    if (input.notes !== undefined) member.notes = input.notes.trim();
+    member.updatedAt = new Date().toISOString();
+
+    this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      try {
+        await prisma.member.updateMany({
+          where: { id },
+          data: {
+            name: member.name,
+            whatsapp: member.whatsapp,
+            teamName: member.teamName || null,
+            tier: member.tier,
+            discountPercentage: member.discountPercentage,
+            status: member.status,
+            notes: member.notes || null,
+            updatedAt: new Date(member.updatedAt),
+          },
+        });
+      } catch (err: any) {
+        console.warn('[Prisma] Gagal update member di MySQL:', err.message);
+      }
+    }
+
+    return member;
+  }
+
+  public async deleteMember(id: string): Promise<boolean> {
+    this.data.members = (this.data.members || []).filter(m => m.id !== id);
+    this.saveToDisk(this.data);
+
+    const prisma = getPrismaClient();
+    if (prisma) {
+      try {
+        await prisma.member.deleteMany({ where: { id } });
+      } catch (err: any) {
+        console.warn('[Prisma] Gagal hapus member di MySQL:', err.message);
+      }
+    }
+
+    return true;
+  }
+
+  // -----------------------------------------------------------------
+  // SLOT SESSIONS MANAGEMENT (Owner defined)
+  // -----------------------------------------------------------------
+  public getSlotSessions(): SlotSessionConfig[] {
+    const raw = this.data.settings.slotSessions || DEFAULT_FALSENINE_SLOTS;
+    const openM = timeToMinutes(this.data.settings.openTime || '07:00');
+    return [...raw].sort((a, b) => {
+      let startA = timeToMinutes(a.startTime);
+      let startB = timeToMinutes(b.startTime);
+      if (startA < openM) startA += 1440;
+      if (startB < openM) startB += 1440;
+      if (startA !== startB) return startA - startB;
+      return a.durationMinutes - b.durationMinutes;
+    });
+  }
+
+  public async updateSlotSessions(newSlots: SlotSessionConfig[]): Promise<{ slotSessions: SlotSessionConfig[]; mysqlSynced: boolean }> {
+    const openM = timeToMinutes(this.data.settings.openTime || '07:00');
+    const sorted = [...newSlots].sort((a, b) => {
+      let startA = timeToMinutes(a.startTime);
+      let startB = timeToMinutes(b.startTime);
+      if (startA < openM) startA += 1440;
+      if (startB < openM) startB += 1440;
+      if (startA !== startB) return startA - startB;
+      return a.durationMinutes - b.durationMinutes;
+    });
+
+    this.data.settings.slotSessions = sorted;
+    const res = await this.updateSettings({ slotSessions: sorted });
+    return {
+      slotSessions: this.getSlotSessions(),
+      mysqlSynced: res.mysqlSynced,
+    };
+  }
+
+  public async resetSlotsToDefault(): Promise<{ slotSessions: SlotSessionConfig[]; mysqlSynced: boolean }> {
+    return this.updateSlotSessions(DEFAULT_FALSENINE_SLOTS);
   }
 
   public async updateBookingScheduleAtomic(

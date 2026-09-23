@@ -28,7 +28,6 @@ import { Header } from './components/Header';
 import { HeroSection } from './components/HeroSection';
 import { DatePicker } from './components/DatePicker';
 import { ScheduleTimeline } from './components/ScheduleTimeline';
-import { TimeDurationPicker } from './components/TimeDurationPicker';
 import { StickySummaryBar } from './components/StickySummaryBar';
 import { DesktopBookingSummary } from './components/DesktopBookingSummary';
 import { CustomerBookingModal } from './components/CustomerBookingModal';
@@ -114,6 +113,35 @@ export default function App() {
     try {
       const data = await fetchPublicSchedule(dateStr);
       setScheduleData(data);
+
+      // Auto-select first available slot session if none or unavailable
+      if (data.slotSessions && data.slotSessions.length > 0) {
+        setStartTime((currStart) => {
+          setDurationMinutes((currDur) => {
+            const currentMatch = data.slotSessions.find(
+              (s) => s.startTime === currStart && s.durationMinutes === currDur
+            );
+            if (!currentMatch || currentMatch.status !== 'available') {
+              const firstAvail = data.slotSessions.find((s) => s.status === 'available');
+              if (firstAvail) {
+                return firstAvail.durationMinutes;
+              }
+            }
+            return currDur;
+          });
+
+          const currentMatch = data.slotSessions.find(
+            (s) => s.startTime === currStart
+          );
+          if (!currentMatch || currentMatch.status !== 'available') {
+            const firstAvail = data.slotSessions.find((s) => s.status === 'available');
+            if (firstAvail) {
+              return firstAvail.startTime;
+            }
+          }
+          return currStart;
+        });
+      }
     } catch (err: any) {
       setScheduleError(err.message || 'Gagal memuat ketersediaan lapangan');
     } finally {
@@ -142,8 +170,43 @@ export default function App() {
   const collisionState = useMemo(() => {
     if (!venue || !scheduleData) return { hasCollision: false };
 
+    // 1. Direct check against official slot session if present
+    if (scheduleData.slotSessions && scheduleData.slotSessions.length > 0) {
+      const matchingSession = scheduleData.slotSessions.find(
+        (s) => s.startTime === startTime && s.durationMinutes === durationMinutes
+      );
+      if (matchingSession) {
+        if (matchingSession.status === 'available') {
+          return { hasCollision: false };
+        } else if (matchingSession.status === 'booked') {
+          return {
+            hasCollision: true,
+            reason: `Sesi ${matchingSession.label} (${matchingSession.startTime}–${matchingSession.endTime}) sudah terisi.`,
+          };
+        } else if (matchingSession.status === 'closed') {
+          return {
+            hasCollision: true,
+            reason: `Sesi ${matchingSession.label} ditutup: ${matchingSession.reason || 'Lapangan tidak beroperasi'}.`,
+          };
+        } else if (matchingSession.status === 'past') {
+          return {
+            hasCollision: true,
+            reason: `Sesi ${matchingSession.label} (${matchingSession.startTime}–${matchingSession.endTime}) sudah lewat.`,
+          };
+        }
+      }
+    }
+
     const openMins = timeToMinutes(venue.openTime || '07:00');
-    const closeMins = timeToMinutes(venue.closeTime || '23:00');
+    let closeMins = timeToMinutes(venue.closeTime || '02:00');
+    if (closeMins <= openMins || venue.closeTime === '00:00' || venue.closeTime === '24:00') {
+      closeMins += 1440;
+    }
+
+    let effectiveEndMins = endMins;
+    if (effectiveEndMins <= startMins && effectiveEndMins <= 360) {
+      effectiveEndMins += 1440;
+    }
 
     if (startMins < openMins) {
       return {
@@ -151,29 +214,30 @@ export default function App() {
         reason: `Waktu mulai (${startTime}) sebelum jam buka operasional (${venue.openTime}).`,
       };
     }
-    if (endMins > closeMins) {
+    if (effectiveEndMins > closeMins) {
       return {
         hasCollision: true,
         reason: `Waktu selesai (${endTime}) melewati jam tutup lapangan (${venue.closeTime}).`,
       };
     }
 
-    // Check against occupied slots
+    // Check against occupied raw slots
     for (const slot of scheduleData.slots) {
       if (slot.status === 'available') continue;
-      const sStart = timeToMinutes(slot.startTime);
-      const sEnd = timeToMinutes(slot.endTime);
+      let sStart = timeToMinutes(slot.startTime);
+      let sEnd = timeToMinutes(slot.endTime);
+      if (sEnd <= sStart && sEnd <= 360) sEnd += 1440;
 
-      if (startMins < sEnd && endMins > sStart) {
+      if (startMins < sEnd && effectiveEndMins > sStart) {
         return {
           hasCollision: true,
-          reason: `Rentang waktu beririsan dengan jadwal "${slot.label}" (${slot.startTime}–${slot.endTime}).`,
+          reason: `Rentang waktu beririsan dengan jadwal "${slot.label || 'Terisi'}" (${slot.startTime}–${slot.endTime}).`,
         };
       }
     }
 
     return { hasCollision: false };
-  }, [venue, scheduleData, startMins, endMins, startTime, endTime]);
+  }, [venue, scheduleData, startMins, endMins, startTime, endTime, durationMinutes]);
 
   // When user taps a free range card on the timeline
   const handleSelectFreeRange = (range: AvailableRange) => {
@@ -270,26 +334,74 @@ export default function App() {
               <ScheduleTimeline
                 slots={scheduleData.slots}
                 freeRanges={scheduleData.freeRanges}
+                slotSessions={scheduleData.slotSessions}
                 isFull={scheduleData.isFull}
                 nearestAvailableDates={scheduleData.nearestAvailableDates}
                 selectedStartTime={startTime}
                 selectedEndTime={endTime}
+                selectedDurationMinutes={durationMinutes}
                 onSelectRange={handleSelectFreeRange}
+                onSelectSession={(session) => {
+                  setStartTime(session.startTime);
+                  setDurationMinutes(session.durationMinutes);
+                }}
+                onBookNow={(session) => {
+                  setStartTime(session.startTime);
+                  setDurationMinutes(session.durationMinutes);
+                  setIsBookingModalOpen(true);
+                }}
                 onSelectDate={(d) => setSelectedDate(d)}
               />
             ) : null}
 
-            {/* Step C: Flexible Start Time & Duration Picker */}
+            {/* Step C: Selected Session Preview & Instant Checkout Button */}
             {venue && (
-              <TimeDurationPicker
-                date={selectedDate}
-                startTime={startTime}
-                durationMinutes={durationMinutes}
-                settings={venue}
-                collisionReason={collisionState.reason}
-                onTimeChange={(newStart) => setStartTime(newStart)}
-                onDurationChange={(newDur) => setDurationMinutes(newDur)}
-              />
+              <div className="bg-gradient-to-br from-emerald-950 to-stone-900 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-emerald-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded-full bg-emerald-800 text-emerald-200 border border-emerald-700">
+                      Sesi Dipilih
+                    </span>
+                    <span className="text-xs text-stone-300 font-semibold">
+                      {formatIndonesianDate(selectedDate)}
+                    </span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black flex items-center gap-2 text-white">
+                    <Clock className="w-5 h-5 text-emerald-400" />
+                    <span>{startTime} – {endTime} WIB</span>
+                    <span className="text-xs font-bold text-emerald-300 bg-emerald-900/80 px-2 py-0.5 rounded-md border border-emerald-700">
+                      {formatDuration(durationMinutes)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-stone-300 flex items-center gap-2">
+                    <span>Total Biaya:</span>
+                    <span className="font-black text-amber-300 text-base">
+                      {formatRupiah(priceResult.totalPrice)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsBookingModalOpen(true)}
+                    disabled={collisionState.hasCollision}
+                    className={`w-full sm:w-auto px-6 py-3 rounded-xl font-black text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                      collisionState.hasCollision
+                        ? 'bg-stone-700 text-stone-400 cursor-not-allowed'
+                        : 'bg-emerald-500 hover:bg-emerald-400 text-stone-950 active:scale-98'
+                    }`}
+                  >
+                    <span>Lanjut Pesan Sesi Ini</span>
+                    <Sparkles className="w-4 h-4 text-stone-950" />
+                  </button>
+                  {collisionState.hasCollision && (
+                    <span className="text-[11px] text-rose-400 font-semibold text-right">
+                      {collisionState.reason}
+                    </span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 

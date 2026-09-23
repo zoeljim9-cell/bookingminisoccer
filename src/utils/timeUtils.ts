@@ -41,6 +41,29 @@ export function timeToMinutes(timeStr: string): number {
 }
 
 /**
+ * Sort slot sessions chronologically according to arena business day opening time
+ * (e.g. 07:00, 08:00 ... 22:00, 00:00, 01:00)
+ */
+export function sortSlotSessions<T extends { startTime: string; durationMinutes?: number }>(
+  sessions: T[],
+  openTime: string = '07:00'
+): T[] {
+  const openMins = timeToMinutes(openTime || '07:00');
+  return [...sessions].sort((a, b) => {
+    let startA = timeToMinutes(a.startTime);
+    let startB = timeToMinutes(b.startTime);
+
+    if (startA < openMins) startA += 1440;
+    if (startB < openMins) startB += 1440;
+
+    if (startA !== startB) {
+      return startA - startB;
+    }
+    return (a.durationMinutes || 0) - (b.durationMinutes || 0);
+  });
+}
+
+/**
  * Convert minutes from 00:00 to "HH:mm"
  */
 export function minutesToTime(totalMinutes: number): string {
@@ -112,75 +135,131 @@ export function getDayOfWeek(dateStr: string): number {
 }
 
 /**
- * Calculate price with proportional minutes and boundary splitting
+ * Check if a date falls on Weekend (Jumat, Sabtu, Minggu) or Weekday (Senin - Kamis)
+ * According to FalseNine Mini Soccer pricelist:
+ * Weekdays = Senin - Kamis
+ * Weekend = Jumat - Minggu
+ */
+export function isWeekendDay(dateStr: string): boolean {
+  const day = getDayOfWeek(dateStr);
+  return day === 5 || day === 6 || day === 0; // Jumat = 5, Sabtu = 6, Minggu = 0
+}
+
+/**
+ * Calculate price with support for Fixed Slot Sessions, photographer addon, and member discount
  */
 export function calculatePrice(
   dateStr: string,
   startTime: string,
   durationMinutes: number,
-  settings: VenueSettings
+  settings: VenueSettings,
+  options?: {
+    memberDiscountPercent?: number;
+    photographerAddon?: 'none' | '1jam' | '2jam';
+  }
 ): PriceCalculationResult {
   const startMins = timeToMinutes(startTime);
   const endMins = startMins + durationMinutes;
+  const isWeekend = isWeekendDay(dateStr);
   const dayOfWeek = getDayOfWeek(dateStr);
 
-  // Active special rules for this day
-  const applicableRules = (settings.specialRates || []).filter(
-    rule => rule.isActive && rule.days.includes(dayOfWeek)
-  );
+  // Check if matches a configured Slot Session in VenueSettings
+  const slotSessions = settings.slotSessions || [];
+  const matchedSlot = slotSessions.find(s => {
+    if (!s.isActive) return false;
+    const sStart = timeToMinutes(s.startTime);
+    // Match start time and duration
+    return sStart === startMins && s.durationMinutes === durationMinutes;
+  });
 
-  // Find all boundary cut points in [startMins, endMins]
-  const cutPoints = new Set<number>([startMins, endMins]);
-  for (const rule of applicableRules) {
-    const rStart = timeToMinutes(rule.startTime);
-    const rEnd = timeToMinutes(rule.endTime);
-    if (rStart > startMins && rStart < endMins) cutPoints.add(rStart);
-    if (rEnd > startMins && rEnd < endMins) cutPoints.add(rEnd);
-  }
+  let basePrice = 0;
+  let segments: PriceSegment[] = [];
 
-  const sortedCuts = Array.from(cutPoints).sort((a, b) => a - b);
-  const segments: PriceSegment[] = [];
-  let totalPrice = 0;
+  if (matchedSlot) {
+    basePrice = isWeekend ? matchedSlot.weekendPrice : matchedSlot.weekdayPrice;
+    const hourlyEquivalent = Math.round((basePrice / matchedSlot.durationMinutes) * 60);
+    segments.push({
+      fromTime: matchedSlot.startTime,
+      toTime: matchedSlot.endTime,
+      durationMinutes: matchedSlot.durationMinutes,
+      hourlyRate: hourlyEquivalent,
+      amount: basePrice,
+      rateName: `${matchedSlot.label || 'Sesi Lapangan'} (${isWeekend ? 'Weekend' : 'Weekdays'})`,
+    });
+  } else {
+    // Fallback: rule-based or proportional calculation
+    const applicableRules = (settings.specialRates || []).filter(
+      rule => rule.isActive && rule.days.includes(dayOfWeek)
+    );
 
-  for (let i = 0; i < sortedCuts.length - 1; i++) {
-    const segStart = sortedCuts[i];
-    const segEnd = sortedCuts[i + 1];
-    const segDuration = segEnd - segStart;
-    const midpoint = (segStart + segEnd) / 2;
-
-    // Determine matching rate rule
-    let activeRate = settings.baseHourlyRate;
-    let rateName = 'Tarif Dasar';
-
+    const cutPoints = new Set<number>([startMins, endMins]);
     for (const rule of applicableRules) {
       const rStart = timeToMinutes(rule.startTime);
       const rEnd = timeToMinutes(rule.endTime);
-      if (midpoint >= rStart && midpoint < rEnd) {
-        activeRate = rule.hourlyRate;
-        rateName = rule.name;
-        break;
-      }
+      if (rStart > startMins && rStart < endMins) cutPoints.add(rStart);
+      if (rEnd > startMins && rEnd < endMins) cutPoints.add(rEnd);
     }
 
-    // Proportional formula: (duration in minutes * hourlyRate) / 60
-    const segAmount = (segDuration * activeRate) / 60;
-    totalPrice += segAmount;
+    const sortedCuts = Array.from(cutPoints).sort((a, b) => a - b);
 
-    segments.push({
-      fromTime: minutesToTime(segStart),
-      toTime: minutesToTime(segEnd),
-      durationMinutes: segDuration,
-      hourlyRate: activeRate,
-      amount: Math.round(segAmount),
-      rateName,
-    });
+    for (let i = 0; i < sortedCuts.length - 1; i++) {
+      const segStart = sortedCuts[i];
+      const segEnd = sortedCuts[i + 1];
+      const segDuration = segEnd - segStart;
+      const midpoint = (segStart + segEnd) / 2;
+
+      let activeRate = settings.baseHourlyRate || 350000;
+      let rateName = 'Tarif Dasar';
+
+      for (const rule of applicableRules) {
+        const rStart = timeToMinutes(rule.startTime);
+        const rEnd = timeToMinutes(rule.endTime);
+        if (midpoint >= rStart && midpoint < rEnd) {
+          activeRate = rule.hourlyRate;
+          rateName = rule.name;
+          break;
+        }
+      }
+
+      const segAmount = (segDuration * activeRate) / 60;
+      basePrice += segAmount;
+
+      segments.push({
+        fromTime: minutesToTime(segStart),
+        toTime: minutesToTime(segEnd),
+        durationMinutes: segDuration,
+        hourlyRate: activeRate,
+        amount: Math.round(segAmount),
+        rateName,
+      });
+    }
   }
+
+  // Calculate Member Discount (if applicable)
+  let discountAmount = 0;
+  const discountPercent = options?.memberDiscountPercent || 0;
+  if (discountPercent > 0 && discountPercent <= 100) {
+    discountAmount = Math.round((basePrice * discountPercent) / 100);
+  }
+
+  // Calculate Photographer Addon
+  let photographerPrice = 0;
+  if (options?.photographerAddon === '1jam') {
+    photographerPrice = 250000;
+  } else if (options?.photographerAddon === '2jam') {
+    photographerPrice = 350000;
+  }
+
+  const finalTotalPrice = Math.max(0, Math.round(basePrice - discountAmount + photographerPrice));
 
   return {
     totalMinutes: durationMinutes,
-    totalPrice: Math.round(totalPrice),
+    totalPrice: finalTotalPrice,
     segments,
     baseHourlyRate: settings.baseHourlyRate,
+    discountAmount,
+    photographerPrice,
+    matchedSlotSession: matchedSlot,
   };
 }
 
@@ -197,23 +276,42 @@ export function checkCollision(
   settings: VenueSettings,
   excludeBookingId?: string
 ): { hasCollision: boolean; reason?: string; conflictingBooking?: Booking; conflictingClosure?: FieldClosure } {
-  const newStart = timeToMinutes(startTime);
-  const newEnd = timeToMinutes(endTime);
-  const openMins = timeToMinutes(settings.openTime);
-  const closeMins = timeToMinutes(settings.closeTime);
+  let newStart = timeToMinutes(startTime);
+  let newEnd = timeToMinutes(endTime);
+  const openMins = timeToMinutes(settings.openTime || '07:00');
+  let closeMins = timeToMinutes(settings.closeTime || '02:00');
+
+  // Handle midnight / overnight closing (e.g. 00:00 -> 1440, 02:00 -> 1560)
+  if (closeMins <= openMins || settings.closeTime === '00:00' || settings.closeTime === '24:00') {
+    closeMins += 1440;
+  }
+
+  // If end time wrapped past midnight (e.g. 22:00 to 00:00 or 02:00)
+  if (newEnd <= newStart && newEnd <= 360) {
+    newEnd += 1440;
+  } else if (endTime === '00:00' || endTime === '24:00') {
+    newEnd = Math.max(newEnd, 1440);
+  }
+
+  // 1. If this exact slot matches an active slot session defined by owner, skip artificial boundary failure
+  const isMatchingDefinedSession = (settings.slotSessions || []).some(
+    (s) => s.isActive && s.startTime === startTime && (s.endTime === endTime || s.durationMinutes === (newEnd - newStart))
+  );
 
   // 1. Operating hours
-  if (newStart < openMins) {
-    return {
-      hasCollision: true,
-      reason: `Waktu mulai (${startTime}) sebelum jam operasional (${settings.openTime}).`,
-    };
-  }
-  if (newEnd > closeMins) {
-    return {
-      hasCollision: true,
-      reason: `Waktu selesai (${endTime}) melewati jam tutup lapangan (${settings.closeTime}).`,
-    };
+  if (!isMatchingDefinedSession) {
+    if (newStart < openMins) {
+      return {
+        hasCollision: true,
+        reason: `Waktu mulai (${startTime}) sebelum jam operasional (${settings.openTime}).`,
+      };
+    }
+    if (newEnd > closeMins) {
+      return {
+        hasCollision: true,
+        reason: `Waktu selesai (${endTime}) melewati jam tutup lapangan (${settings.closeTime}).`,
+      };
+    }
   }
 
   // 2. Closed days
@@ -246,8 +344,10 @@ export function checkCollision(
   // 4. Closures check
   for (const closure of closures) {
     if (closure.date !== dateStr) continue;
-    const cStart = timeToMinutes(closure.startTime);
-    const cEnd = timeToMinutes(closure.endTime);
+    let cStart = timeToMinutes(closure.startTime);
+    let cEnd = timeToMinutes(closure.endTime);
+    if (cEnd <= cStart && cEnd <= 360) cEnd += 1440;
+
     // Overlap: newStart < cEnd && newEnd > cStart
     if (newStart < cEnd && newEnd > cStart) {
       return {
@@ -265,8 +365,9 @@ export function checkCollision(
     if (b.date !== dateStr) continue;
     if (b.bookingStatus === 'cancelled') continue;
 
-    const bStart = timeToMinutes(b.startTime);
-    const bEnd = timeToMinutes(b.endTime);
+    let bStart = timeToMinutes(b.startTime);
+    let bEnd = timeToMinutes(b.endTime);
+    if (bEnd <= bStart && bEnd <= 360) bEnd += 1440;
 
     // Overlap rule with buffer:
     // Collision if newStart < (bEnd + buffer) AND newEnd > (bStart - buffer)

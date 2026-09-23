@@ -15,11 +15,23 @@ import {
   ChevronUp,
   Loader2,
   Users,
-  FileText,
+  Camera,
+  Award,
+  Sparkles,
+  Gift,
+  Tag,
 } from 'lucide-react';
 import { Booking, PriceCalculationResult, VenueSettings } from '../types';
-import { calculatePrice, formatDuration, formatIndonesianDate, formatRupiah, minutesToTime, timeToMinutes } from '../utils/timeUtils';
-import { submitCustomerBooking } from '../api';
+import {
+  calculatePrice,
+  formatDuration,
+  formatIndonesianDate,
+  formatRupiah,
+  isWeekendDay,
+  minutesToTime,
+  timeToMinutes,
+} from '../utils/timeUtils';
+import { submitCustomerBooking, verifyMemberApi } from '../api';
 
 interface CustomerBookingModalProps {
   isOpen: boolean;
@@ -56,13 +68,77 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // FalseNine System: Member & Photographer Addon
+  const [memberQuery, setMemberQuery] = useState('');
+  const [verifiedMember, setVerifiedMember] = useState<{
+    id: string;
+    memberCode: string;
+    name: string;
+    tier: string;
+    discountPercentage: number;
+    teamName?: string;
+  } | null>(null);
+  const [memberMessage, setMemberMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const [isVerifyingMember, setIsVerifyingMember] = useState(false);
+  const [photographerAddon, setPhotographerAddon] = useState<'none' | '1jam' | '2jam'>('none');
+
   if (!isOpen) return null;
 
   const startMins = timeToMinutes(startTime);
   const endMins = startMins + durationMinutes;
   const endTime = minutesToTime(endMins);
+  const isWeekend = isWeekendDay(date);
 
-  const priceResult: PriceCalculationResult = calculatePrice(date, startTime, durationMinutes, settings);
+  // Match owner defined slot session
+  const matchingSession = (settings.slotSessions || []).find(
+    (s) => s.startTime === startTime && s.durationMinutes === durationMinutes
+  );
+
+  const priceResult: PriceCalculationResult = calculatePrice(
+    date,
+    startTime,
+    durationMinutes,
+    settings,
+    {
+      memberDiscountPercent: verifiedMember?.discountPercentage || 0,
+      photographerAddon,
+    }
+  );
+
+  const handleVerifyMember = async () => {
+    if (!memberQuery.trim()) {
+      setMemberMessage({ text: 'Masukkan kode member atau nomor WA terdaftar', isError: true });
+      return;
+    }
+
+    setIsVerifyingMember(true);
+    setMemberMessage(null);
+
+    try {
+      const res = await verifyMemberApi(memberQuery.trim());
+      if (res.valid && res.member) {
+        setVerifiedMember(res.member as any);
+        setMemberMessage({ text: res.message || 'Member aktif!', isError: false });
+        if (res.member.teamName && !contactDraft.teamName) {
+          onUpdateContactDraft({ teamName: res.member.teamName });
+        }
+      } else {
+        setVerifiedMember(null);
+        setMemberMessage({ text: res.message || 'Member tidak ditemukan.', isError: true });
+      }
+    } catch (err: any) {
+      setVerifiedMember(null);
+      setMemberMessage({ text: err.message || 'Gagal memverifikasi member.', isError: true });
+    } finally {
+      setIsVerifyingMember(false);
+    }
+  };
+
+  const handleRemoveMember = () => {
+    setVerifiedMember(null);
+    setMemberMessage(null);
+    setMemberQuery('');
+  };
 
   // Input validations for Step 2
   const validateContact = (): boolean => {
@@ -102,6 +178,8 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
         customerWhatsapp: contactDraft.whatsapp,
         teamName: contactDraft.teamName,
         notes: contactDraft.notes,
+        memberCode: verifiedMember?.memberCode,
+        photographerAddon,
       });
 
       onSuccess(res.booking, res.secretToken);
@@ -116,22 +194,25 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-stone-900/60 backdrop-blur-xs p-0 sm:p-4" id="customer-booking-modal">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-xl w-full max-h-[92vh] sm:max-h-[88vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden animate-in slide-in-from-bottom-5 duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-stone-950/70 backdrop-blur-xs p-0 sm:p-4"
+      id="customer-booking-modal"
+    >
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-xl w-full max-h-[94vh] sm:max-h-[90vh] flex flex-col shadow-2xl border border-stone-200 overflow-hidden animate-in slide-in-from-bottom-5 duration-200">
         {/* Mobile grab handle */}
         <div className="sm:hidden w-10 h-1 bg-stone-300 rounded-full mx-auto mt-2.5 -mb-1" />
 
         {/* Header */}
-        <div className="px-5 py-3.5 sm:py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50/70">
+        <div className="px-5 py-3.5 sm:py-4 border-b border-stone-200 flex items-center justify-between bg-stone-900 text-white">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500 text-stone-950">
                 Langkah {step} dari 3
               </span>
-              <span className="text-xs text-stone-500 font-medium">Booking Lapangan</span>
+              <span className="text-xs text-stone-300 font-medium">FalseNine Mini Soccer</span>
             </div>
-            <h2 className="text-base sm:text-lg font-bold text-stone-900 mt-0.5">
-              {step === 1 && 'Tinjau Jadwal & Estimasi'}
+            <h2 className="text-base sm:text-lg font-bold text-white mt-0.5">
+              {step === 1 && 'Sesi Lapangan & Paket Tambahan'}
               {step === 2 && 'Informasi Kontak Pemesan'}
               {step === 3 && 'Periksa & Konfirmasi Booking'}
             </h2>
@@ -141,16 +222,16 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
             id="btn-close-booking-modal"
             type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-200/60 transition-colors cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
+            className="p-1.5 text-stone-400 hover:text-white rounded-lg hover:bg-stone-800 transition-colors cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Stepper Progress Bar */}
-        <div className="h-1 w-full bg-stone-100">
+        <div className="h-1.5 w-full bg-stone-200">
           <div
-            className="h-full bg-emerald-800 transition-all duration-300"
+            className="h-full bg-emerald-600 transition-all duration-300"
             style={{ width: `${(step / 3) * 100}%` }}
           />
         </div>
@@ -173,65 +254,250 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                     }}
                     className="mt-2 text-rose-900 font-bold underline cursor-pointer"
                   >
-                    Kembali pilih waktu lain
+                    Kembali pilih jadwal lain
                   </button>
                 )}
               </div>
             </div>
           )}
 
-          {/* STEP 1: Jadwal Recap */}
+          {/* STEP 1: Jadwal Recap + Member + Addon */}
           {step === 1 && (
             <div className="space-y-3.5">
-              <div className="bg-stone-50/90 border border-stone-200 rounded-xl p-4 space-y-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-stone-500 uppercase tracking-wider">
-                  <Calendar className="w-4 h-4 text-emerald-800" />
-                  <span>Jadwal yang Dipilih</span>
+              {/* Session Overview Card */}
+              <div className="bg-emerald-950 text-white rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-sm">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      {matchingSession?.label || `Sesi ${startTime}–${endTime}`}
+                    </span>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-stone-800 text-stone-300">
+                      {isWeekend ? 'Tarif Weekend (Jum-Min)' : 'Tarif Weekday (Sen-Kam)'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-base sm:text-lg font-bold text-stone-900">
+
+                <div className="text-lg sm:text-xl font-black text-white">
                   {formatIndonesianDate(date)}
                 </div>
-                <div className="flex items-center justify-between pt-2 border-t border-stone-200 text-sm">
-                  <span className="font-medium text-stone-600">Jam Main:</span>
-                  <span className="font-extrabold text-stone-900 text-base">
-                    {startTime} – {endTime} WIB
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-stone-600">Durasi:</span>
-                  <span className="font-bold text-emerald-900">
-                    {formatDuration(durationMinutes)}
-                  </span>
+
+                <div className="flex items-baseline justify-between mt-3 pt-3 border-t border-emerald-800/60">
+                  <div>
+                    <div className="text-[11px] text-emerald-300 font-semibold">Jam Main Sesi:</div>
+                    <div className="text-xl sm:text-2xl font-black text-amber-400">
+                      {startTime} – {endTime} <span className="text-xs text-stone-300 font-normal">WIB</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[11px] text-emerald-300 font-semibold">Durasi:</div>
+                    <div className="text-sm sm:text-base font-bold text-white">
+                      {formatDuration(durationMinutes)}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Rate Breakdown */}
-              <div className="border border-stone-200 rounded-xl p-4 bg-white space-y-2">
+              {/* Free Amenities Promo Banner if >= 2 Jam */}
+              {durationMinutes >= 120 && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 flex items-start gap-3">
+                  <Gift className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-stone-800">
+                    <span className="font-extrabold text-amber-800 block mb-0.5">
+                      🎁 FREE FASILITAS BOOKING 2 JAM:
+                    </span>
+                    <span>Gratis Rompi Tim (2 Warna), Air Mineral Galon Dingin, dan Peluit Wasit pertandingan!</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Member Code Verification Section */}
+              <div className="border border-stone-200 rounded-xl p-4 bg-stone-50/70 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
+                    <Award className="w-4 h-4 text-emerald-700" />
+                    <span>Member & Komunitas FalseNine</span>
+                  </div>
+                  {verifiedMember && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Terverifikasi Diskon {verifiedMember.discountPercentage}%
+                    </span>
+                  )}
+                </div>
+
+                {!verifiedMember ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        id="input-member-code"
+                        type="text"
+                        placeholder="Masukkan Kode Member / No. WA..."
+                        value={memberQuery}
+                        onChange={(e) => setMemberQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleVerifyMember();
+                          }
+                        }}
+                        className="flex-1 px-3 py-2 text-xs sm:text-sm bg-white border border-stone-300 rounded-lg text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-700 uppercase"
+                      />
+                      <button
+                        type="button"
+                        id="btn-verify-member"
+                        onClick={handleVerifyMember}
+                        disabled={isVerifyingMember || !memberQuery.trim()}
+                        className="px-3.5 py-2 text-xs font-bold text-white bg-emerald-800 hover:bg-emerald-900 rounded-lg cursor-pointer transition-colors disabled:opacity-50 min-h-[38px] flex items-center gap-1"
+                      >
+                        {isVerifyingMember ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          'Cek Member'
+                        )}
+                      </button>
+                    </div>
+                    {memberMessage && (
+                      <p
+                        className={`text-xs ${
+                          memberMessage.isError ? 'text-rose-600' : 'text-emerald-700 font-semibold'
+                        }`}
+                      >
+                        {memberMessage.text}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-emerald-900">
+                        {verifiedMember.name} • {verifiedMember.memberCode}
+                      </div>
+                      <div className="text-[11px] text-emerald-700">
+                        Tier {verifiedMember.tier} • Diskon {verifiedMember.discountPercentage}% otomatis diterapkan
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveMember}
+                      className="text-xs text-rose-700 hover:text-rose-900 font-semibold underline cursor-pointer"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Photographer Addon Section */}
+              <div className="border border-stone-200 rounded-xl p-4 bg-white space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-stone-800">
+                  <Camera className="w-4 h-4 text-emerald-800" />
+                  <span>Jasa Dokumentasi Foto Lapangan FalseNine</span>
+                </div>
+                <div className="text-[11px] text-stone-500">
+                  Fotografer profesional resmi lapangan untuk mengabadikan aksi tim & highlight pertandingan Anda.
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                  <label
+                    className={`border rounded-xl p-2.5 flex flex-col justify-between cursor-pointer transition-all ${
+                      photographerAddon === 'none'
+                        ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                        : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-stone-800">Tanpa Foto</span>
+                      <input
+                        type="radio"
+                        name="photographerAddon"
+                        checked={photographerAddon === 'none'}
+                        onChange={() => setPhotographerAddon('none')}
+                        className="accent-emerald-700"
+                      />
+                    </div>
+                    <div className="text-xs font-semibold text-stone-500">Rp 0</div>
+                  </label>
+
+                  <label
+                    className={`border rounded-xl p-2.5 flex flex-col justify-between cursor-pointer transition-all ${
+                      photographerAddon === '1jam'
+                        ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                        : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-stone-800">Foto 1 Jam</span>
+                      <input
+                        type="radio"
+                        name="photographerAddon"
+                        checked={photographerAddon === '1jam'}
+                        onChange={() => setPhotographerAddon('1jam')}
+                        className="accent-emerald-700"
+                      />
+                    </div>
+                    <div className="text-xs font-bold text-emerald-800">+Rp 250.000</div>
+                  </label>
+
+                  <label
+                    className={`border rounded-xl p-2.5 flex flex-col justify-between cursor-pointer transition-all ${
+                      photographerAddon === '2jam'
+                        ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                        : 'border-stone-200 hover:border-stone-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-stone-800">Foto 2 Jam Full</span>
+                      <input
+                        type="radio"
+                        name="photographerAddon"
+                        checked={photographerAddon === '2jam'}
+                        onChange={() => setPhotographerAddon('2jam')}
+                        className="accent-emerald-700"
+                      />
+                    </div>
+                    <div className="text-xs font-bold text-emerald-800">+Rp 350.000</div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Price Calculation Summary Box */}
+              <div className="border border-stone-200 rounded-xl p-4 bg-stone-50 space-y-2">
                 <div className="text-xs font-bold text-stone-800">Rincian Perhitungan Biaya:</div>
                 <div className="space-y-1.5 text-xs">
                   {priceResult.segments.map((seg, idx) => (
                     <div key={idx} className="flex items-center justify-between text-stone-600">
                       <span>
-                        {seg.fromTime}–{seg.toTime} ({formatDuration(seg.durationMinutes)}) @{' '}
-                        {formatRupiah(seg.hourlyRate)}/jam
+                        {seg.fromTime}–{seg.toTime} ({formatDuration(seg.durationMinutes)})
                       </span>
                       <span className="font-bold text-stone-800">{formatRupiah(seg.amount)}</span>
                     </div>
                   ))}
+
+                  {/* Addon row */}
+                  {(priceResult.addonPrice || priceResult.photographerPrice) && (priceResult.addonPrice || priceResult.photographerPrice || 0) > 0 ? (
+                    <div className="flex items-center justify-between text-emerald-800 font-medium">
+                      <span>
+                        {photographerAddon === '1jam'
+                          ? 'Dokumentasi Foto Lapangan (1 Jam)'
+                          : 'Dokumentasi Foto Lapangan (2 Jam Full)'}
+                      </span>
+                      <span className="font-bold">+{formatRupiah(priceResult.addonPrice || priceResult.photographerPrice || 0)}</span>
+                    </div>
+                  ) : null}
+
+                  {/* Member discount row */}
+                  {priceResult.discountAmount && priceResult.discountAmount > 0 ? (
+                    <div className="flex items-center justify-between text-rose-700 font-semibold">
+                      <span>Diskon Member ({verifiedMember?.discountPercentage || 0}%)</span>
+                      <span>-{formatRupiah(priceResult.discountAmount)}</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="pt-2 border-t border-stone-200 flex items-center justify-between">
-                  <span className="font-bold text-stone-800 text-sm">Total Estimasi:</span>
-                  <span className="font-extrabold text-emerald-800 text-lg">
+                  <span className="font-bold text-stone-900 text-sm">Total Biaya:</span>
+                  <span className="font-black text-emerald-900 text-xl">
                     {formatRupiah(priceResult.totalPrice)}
                   </span>
-                </div>
-              </div>
-
-              <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-start gap-2">
-                <HelpCircle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">Info:</span> Jadwal lapangan resmi terkunci setelah Anda menyelesaikan konfirmasi di langkah ke-3.
                 </div>
               </div>
             </div>
@@ -273,7 +539,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                   />
                 </div>
                 <p className="text-[11px] text-stone-500 mt-1">
-                  Nomor WhatsApp digunakan untuk konfirmasi kedatangan dan pencarian kode booking.
+                  Nomor WhatsApp digunakan untuk konfirmasi kedatangan dan pencarian kode booking di FalseNine.
                 </p>
               </div>
 
@@ -287,7 +553,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                 >
                   <span className="flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-stone-400" />
-                    <span>Informasi Tim & Catatan (Opsional)</span>
+                    <span>Informasi Tim & Catatan Tambahan (Opsional)</span>
                   </span>
                   {showOptionalFields ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
@@ -296,12 +562,12 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                   <div className="space-y-3 mt-2 pt-2 border-t border-stone-100">
                     <div>
                       <label className="block text-xs font-medium text-stone-700 mb-1">
-                        Nama Tim / Klub
+                        Nama Tim / Komunitas
                       </label>
                       <input
                         id="input-team-name"
                         type="text"
-                        placeholder="Contoh: Garuda Muda FC"
+                        placeholder="Contoh: FalseNine FC / Garuda Muda"
                         value={contactDraft.teamName}
                         onChange={(e) => onUpdateContactDraft({ teamName: e.target.value })}
                         className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-700"
@@ -310,12 +576,12 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
 
                     <div>
                       <label className="block text-xs font-medium text-stone-700 mb-1">
-                        Catatan Khusus
+                        Catatan Khusus ke Lapangan
                       </label>
                       <textarea
                         id="input-customer-notes"
                         rows={2}
-                        placeholder="Contoh: Tolong siapkan rompi 2 warna dan bola 2 pcs"
+                        placeholder="Contoh: Mohon siapkan rompi hijau dan bola match ball"
                         value={contactDraft.notes}
                         onChange={(e) => onUpdateContactDraft({ notes: e.target.value })}
                         className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-700"
@@ -331,27 +597,27 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
           {step === 3 && (
             <div className="space-y-3.5">
               {/* Comprehensive Summary Card */}
-              <div className="bg-emerald-50/50 border border-emerald-200/90 rounded-xl p-4 space-y-2.5">
-                <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
-                  <span>RINGKASAN PESANAN</span>
+              <div className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
+                  <span>RINGKASAN BOOKING RESMI</span>
                   <span className="bg-emerald-800 text-white px-2 py-0.5 rounded text-[10px]">
-                    1 Lapangan
+                    FalseNine Mini Soccer
                   </span>
                 </div>
 
-                <div className="text-base font-extrabold text-stone-900">
+                <div className="text-base font-black text-stone-900">
                   {formatIndonesianDate(date)}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-emerald-200/60">
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-emerald-200">
                   <div>
-                    <span className="text-stone-500 block">Waktu Sewa:</span>
-                    <span className="font-bold text-stone-800 text-sm">
+                    <span className="text-stone-500 block">Waktu Sesi:</span>
+                    <span className="font-extrabold text-stone-900 text-sm">
                       {startTime} – {endTime} WIB
                     </span>
                   </div>
                   <div>
-                    <span className="text-stone-500 block">Durasi:</span>
+                    <span className="text-stone-500 block">Durasi Sesi:</span>
                     <span className="font-bold text-stone-800 text-sm">
                       {formatDuration(durationMinutes)}
                     </span>
@@ -366,34 +632,57 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                   </div>
                   {contactDraft.teamName && (
                     <div className="col-span-2">
-                      <span className="text-stone-500 block">Tim:</span>
+                      <span className="text-stone-500 block">Tim / Komunitas:</span>
                       <span className="font-bold text-stone-800">{contactDraft.teamName}</span>
+                    </div>
+                  )}
+                  {verifiedMember && (
+                    <div className="col-span-2 text-emerald-800">
+                      <span className="font-bold">Member Terdaftar:</span> {verifiedMember.name} ({verifiedMember.memberCode}) - Diskon {verifiedMember.discountPercentage}%
+                    </div>
+                  )}
+                  {photographerAddon !== 'none' && (
+                    <div className="col-span-2 text-stone-700">
+                      <span className="font-bold">Addon Foto:</span>{' '}
+                      {photographerAddon === '1jam' ? 'Dokumentasi Foto 1 Jam (+Rp 250.000)' : 'Dokumentasi Foto 2 Jam Full (+Rp 350.000)'}
                     </div>
                   )}
                 </div>
 
                 {/* Pricing Breakdown */}
-                <div className="pt-2 border-t border-emerald-200/80 space-y-1 text-xs">
+                <div className="pt-2 border-t border-emerald-200 space-y-1 text-xs">
                   {priceResult.segments.map((seg, i) => (
                     <div key={i} className="flex justify-between text-stone-600">
                       <span>
-                        {seg.fromTime}–{seg.toTime} ({formatDuration(seg.durationMinutes)})
+                        Sesi {seg.fromTime}–{seg.toTime} ({formatDuration(seg.durationMinutes)})
                       </span>
                       <span className="font-semibold text-stone-800">{formatRupiah(seg.amount)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between text-sm font-black text-emerald-950 pt-1 border-t border-emerald-200">
+                  {(priceResult.addonPrice || priceResult.photographerPrice) && (priceResult.addonPrice || priceResult.photographerPrice || 0) > 0 ? (
+                    <div className="flex justify-between text-emerald-800 font-medium">
+                      <span>Dokumentasi Foto</span>
+                      <span className="font-bold">+{formatRupiah(priceResult.addonPrice || priceResult.photographerPrice || 0)}</span>
+                    </div>
+                  ) : null}
+                  {priceResult.discountAmount && priceResult.discountAmount > 0 ? (
+                    <div className="flex justify-between text-rose-700 font-semibold">
+                      <span>Diskon Member</span>
+                      <span>-{formatRupiah(priceResult.discountAmount)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between text-sm font-black text-emerald-950 pt-1.5 border-t border-emerald-300">
                     <span>Total Pembayaran:</span>
-                    <span className="text-base text-emerald-800">{formatRupiah(priceResult.totalPrice)}</span>
+                    <span className="text-lg text-emerald-900">{formatRupiah(priceResult.totalPrice)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Payment & Cancellation Policy */}
+              {/* Payment & Terms */}
               <div className="border border-stone-200 rounded-xl p-3.5 bg-stone-50 space-y-1.5 text-xs text-stone-600">
                 <div className="flex items-center gap-1.5 font-bold text-stone-800">
                   <Shield className="w-3.5 h-3.5 text-emerald-800" />
-                  <span>Metode Pembayaran & Ketentuan</span>
+                  <span>Ketentuan Pembayaran FalseNine</span>
                 </div>
                 <p>
                   <strong>Metode:</strong> {settings.paymentTerms}
@@ -438,7 +727,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors cursor-pointer min-h-[44px]"
             >
               <span>Lanjutkan</span>
-              <ChevronRight className="w-4 h-4 text-lime-400" />
+              <ChevronRight className="w-4 h-4 text-emerald-300" />
             </button>
           ) : (
             <button
@@ -455,7 +744,7 @@ export const CustomerBookingModal: React.FC<CustomerBookingModalProps> = ({
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-lime-400 flex-shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-300 flex-shrink-0" />
                   <span className="truncate">Konfirmasi Booking • {formatRupiah(priceResult.totalPrice)}</span>
                 </>
               )}
